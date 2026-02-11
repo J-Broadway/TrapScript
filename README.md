@@ -1,22 +1,22 @@
-# TrapCode.py Documentation
+# trapscript.py Documentation
 
-TrapCode is a Python library designed to streamline scripting in FL Studio's VFX Script environment. It provides abstractions for MIDI voice handling, UI control creation, parameter management, output controllers, and export proxies. The library aims to reduce boilerplate code while offering intuitive, TouchDesigner-inspired APIs for creative coding in audio/MIDI effects.
+TrapScript is a Python library designed to streamline scripting in FL Studio's VFX Script environment. It provides abstractions for MIDI voice handling, UI control creation, parameter management, output controllers, and export proxies. The library aims to reduce boilerplate code while offering intuitive, TouchDesigner-inspired APIs for creative coding in audio/MIDI effects.
 
 ## Installation
-Place `TrapCode.py` in FL Studio's Python Lib directory (e.g., `C:\Program Files (x86)\Image-Line\FL Studio 2025\Shared\Python\Lib\`).
+Place `trapscript.py` in FL Studio's Python Lib directory (e.g., `C:\Program Files (x86)\Image-Line\FL Studio 2025\Shared\Python\Lib\`).
 Import it in your VFX Script with
 ```python
-import TrapCode as tc
+import trapscript as ts
 ```
 
 ## Key Concepts
 - **Singleton UI**: Only one UI instance per script, created in `createDialog()`.
-- **Parameter Namespace (`par`)**: Controls are automatically added as attributes to `tc.par` for global access (e.g., `tc.par.MyKnob.val`).
+- **Parameter Namespace (`par`)**: Controls are automatically added as attributes to `ts.par` for global access (e.g., `ts.par.MyKnob.val`).
 - **Export Modes**: Controls can bind to output controllers for parameter automation.
 - **Coercion and Arithmetic**: UI wrappers support numeric operations (e.g., `par.knob * 2`) and coercion to float/int/bool.
 - **Read-Only Properties**: Attributes like `name`, `min`, `max`, `hint` cannot be changed after creation.
 - **Grouping Support**: Controls in groups use qualified internal keys (e.g., `"Group: Control"`) for value access, ensuring correct handling in hierarchical UIs.
-- **Parameter Filtering**: Use `tc.pars()` to retrieve lists or dicts of parameters with flexible filters for type and group.
+- **Parameter Filtering**: Use `ts.pars()` to retrieve lists or dicts of parameters with flexible filters for type and group.
 
 ## Features
 
@@ -26,7 +26,7 @@ Simplifies voice modification by subclassing `vfx.Voice` and preserving the pare
 **Code Example**:
 ```python
 def onTriggerVoice(incomingVoice):
-    midi = tc.MIDI(incomingVoice)
+    midi = ts.MIDI(incomingVoice)
     midi.trigger()  # Trigger the modified voice
 ```
 
@@ -39,15 +39,15 @@ Utility functions for clamping, normalization, and warnings.
 
 **Code Example**:
 ```python
-value = tc._clamp(1.5, 0, 1)  # Returns 1
-norm = tc._norm_from_range(50, 0, 100)  # Returns 0.5
-tc._warn_clamp('MyParam', 150, 0, 100)  # Prints notice
+value = ts._clamp(1.5, 0, 1)  # Returns 1
+norm = ts._norm_from_range(50, 0, 100)  # Returns 0.5
+ts._warn_clamp('MyParam', 150, 0, 100)  # Prints notice
 ```
 
 **Edge Case**:
 ```python
-tc._norm_from_range(5, 10, 10)  # Returns 0.0 (handles lo == hi)
-tc._warn_clamp('Edge', -1, 0, 1)  # Warns and clamps to 0
+ts._norm_from_range(5, 10, 10)  # Returns 0.0 (handles lo == hi)
+ts._warn_clamp('Edge', -1, 0, 1)  # Warns and clamps to 0
 ```
 
 ### 3. Debug Logging
@@ -55,10 +55,10 @@ Toggle debug output with log levels for controlling verbosity.
 
 **Code Example**:
 ```python
-tc.debug(True)            # Enable debug logging (level 1)
-tc.debug(True, level=2)   # Enable verbose logging (level 2)
-tc.debug(False)           # Disable debug logging
-tc.debug()                # Query state: {'enabled': True, 'level': 2}
+ts.debug(True)            # Enable debug logging (level 1)
+ts.debug(True, level=2)   # Enable verbose logging (level 2)
+ts.debug(False)           # Disable debug logging
+ts.debug()                # Query state: {'enabled': True, 'level': 2}
 ```
 
 **Log Levels**:
@@ -67,16 +67,16 @@ tc.debug()                # Query state: {'enabled': True, 'level': 2}
 | 1 | Important events (triggers, releases, errors) |
 | 2 | Verbose (tick timing, arc calculations, internal state) |
 
-When enabled, log messages appear with category prefixes like `[TrapCode:patterns]` for easy filtering.
+When enabled, log messages appear with category prefixes like `[TrapScript:patterns]` for easy filtering.
 
 **Edge Case**:
 ```python
-tc.debug()['enabled']  # Access enabled state directly
-tc.debug(True, level=3)  # Level > 2 works but no extra output currently defined
+ts.debug()['enabled']  # Access enabled state directly
+ts.debug(True, level=3)  # Level > 2 works but no extra output currently defined
 ```
 
 ### 4. Parameter Namespace (`par`)
-Dynamic object for accessing UI controls globally via attributes. Controls are added as attributes to `tc.par` during creation in `createDialog()`, using `par_name` (if provided) or a sanitized version of `name` as the attribute name. Default behavior: If `par_name` is None (not set), it defaults to a sanitized `name` where non-word characters (e.g., spaces, punctuation) are replaced with '_' and leading/trailing '_' are stripped. Attribute names must be valid Python identifiers (start with letter/underscore, no spaces/special chars except '_'); invalid ones raise ValueError.
+Dynamic object for accessing UI controls globally via attributes. Controls are added as attributes to `ts.par` during creation in `createDialog()`, using `par_name` (if provided) or a sanitized version of `name` as the attribute name. Default behavior: If `par_name` is None (not set), it defaults to a sanitized `name` where non-word characters (e.g., spaces, punctuation) are replaced with '_' and leading/trailing '_' are stripped. Attribute names must be valid Python identifiers (start with letter/underscore, no spaces/special chars except '_'); invalid ones raise ValueError.
 
 **Defaults**:
 - `par_name`: None (falls back to sanitized `name`).
@@ -90,13 +90,13 @@ Dynamic object for accessing UI controls globally via attributes. Controls are a
 **Code Example**:
 ```python
 def createDialog():
-    ui = tc.UI()
-    ui.Knob(name='My Knob', d=0.5)  # Added as tc.par.My_Knob (sanitized)
+    ui = ts.UI()
+    ui.Knob(name='My Knob', d=0.5)  # Added as ts.par.My_Knob (sanitized)
     ui.Knob(name='Custom', par_name='my_knob', d=0.5)  # Explicit par_name
     return ui.form
 
 def onTick():
-    print(tc.par.My_Knob.val)  # Access value
+    print(ts.par.My_Knob.val)  # Access value
 ```
 
 **Edge Case**:
@@ -107,61 +107,61 @@ ui.Knob(par_name='my_knob')     # Raises ValueError if 'my_knob' already exists
 ```
 
 ### 5. Output Controllers
-Manage output controllers with `tc.output`.
+Manage output controllers with `ts.output`.
 
 - `add(name, default=0.0)`: Adds a controller if not declared.
 - `set(name, value)`: Sets the controller value.
 
-Note that `tc.output.add()` will not work inside `def onTick()`, `def onTriggerVoice()`, or `def onReleaseVoice()`. This is because output controllers must be declared during the script's initialization phase (e.g., inside `createDialog()` or at the module level outside any functions), as the host environment (FL Studio) sets up the parameter interface once at load time. Adding controllers dynamically during runtime callbacks may fail silently or cause errors, since the parameter interface is fixed after the script is loaded. Controllers are only added if `export` mode is 'bind' or 'custom' during UI creation (see Section 6). Manual `tc.output.add()` is for custom scenarios outside UI bindings.
+Note that `ts.output.add()` will not work inside `def onTick()`, `def onTriggerVoice()`, or `def onReleaseVoice()`. This is because output controllers must be declared during the script's initialization phase (e.g., inside `createDialog()` or at the module level outside any functions), as the host environment (FL Studio) sets up the parameter interface once at load time. Adding controllers dynamically during runtime callbacks may fail silently or cause errors, since the parameter interface is fixed after the script is loaded. Controllers are only added if `export` mode is 'bind' or 'custom' during UI creation (see Section 6). Manual `ts.output.add()` is for custom scenarios outside UI bindings.
 
 **Code Example**:
 ```python
-import TrapCode as tc
-tc.output.add('MyOut', default=0.5)
-tc.output.set('MyOut', 1.0)
+import trapscript as ts
+ts.output.add('MyOut', default=0.5)
+ts.output.set('MyOut', 1.0)
 ```
 
 **Edge Case**:
 ```python
-tc.output.add('MyOut', default='invalid')  # Defaults to 0.0 (coerces to float)
-tc.output.set('NonExistent', 1.0)  # May fail silently if not added
+ts.output.add('MyOut', default='invalid')  # Defaults to 0.0 (coerces to float)
+ts.output.set('NonExistent', 1.0)  # May fail silently if not added
 ```
 
 ### 6. Exports (Batch Update and Proxies)
-Bind UI controls to output controllers for automation. `tc.exports` handles batch updates and introspection, while proxies are per-control sinks.
+Bind UI controls to output controllers for automation. `ts.exports` handles batch updates and introspection, while proxies are per-control sinks.
 
 - Modes: `None` (no export), `'bind'` (follows UI value), `'custom'` (manual set via `.export.val`).
-- Updated automatically in `onTick()` via `tc.exports.update()`.
+- Updated automatically in `onTick()` via `ts.exports.update()`.
 
-Call `tc.exports.update()` each tick to push values based on mode ('bind' pulls from UI, 'custom' from `.export.val`). Skips unchanged values to optimize.
+Call `ts.exports.update()` each tick to push values based on mode ('bind' pulls from UI, 'custom' from `.export.val`). Skips unchanged values to optimize.
 
 In 'bind' mode, values are resolved by control type: Knobs as float, KnobInts as int (floated), Combos as index (floated), Checkboxes as 1.0/0.0, Texts as float(str(val).strip()) if numeric (uses .export_default, default 0.0, if conversion fails). Transient errors (e.g., non-numeric Text in 'bind') use fallback for Text or skip silently for others. If a wrapper is missing (e.g., due to rename), skips silently. Modes can be strings like 'Bind' (case-insensitive, stripped), or equivalents like 'off'/''/False for None. Invalid modes raise ValueError during creation.
 
-**Introspecting Exports**: `exports_dict = tc.exports()` returns a dict keyed by `par_name` (or controller name if no `par_name`), with values like {'name': ..., 'mode': ..., 'val': ...}. Useful for debugging or dynamic logic.
+**Introspecting Exports**: `exports_dict = ts.exports()` returns a dict keyed by `par_name` (or controller name if no `par_name`), with values like {'name': ..., 'mode': ..., 'val': ...}. Useful for debugging or dynamic logic.
 
 **Code Example**:
 ```python
 def createDialog():
-    ui = tc.UI()
+    ui = ts.UI()
     ui.Knob(name='BoundKnob', export='bind')  # Binds to output controller
     ui.Knob(name='CustomKnob', export='custom')
     return ui.form
 
 def onTick():
-    tc.par.CustomKnob.export.val = 0.75  # Manual set for 'custom'
-    # Alternatively: tc.par.CustomKnob.export = 0.75 (auto-coerces to float; raises if non-numeric)
-    tc.exports.update()  # Call this in onTick() to push values
+    ts.par.CustomKnob.export.val = 0.75  # Manual set for 'custom'
+    # Alternatively: ts.par.CustomKnob.export = 0.75 (auto-coerces to float; raises if non-numeric)
+    ts.exports.update()  # Call this in onTick() to push values
 ```
 
 **Edge Case**:
 ```python
 ui.Text(export='bind')  # In bind, non-numeric text skips push or uses export_default
-tc.par.CustomKnob.export = 'invalid'  # Raises TypeError (must be numeric)
-tc.exports.update()  # If exception in custom mode, skips silently (robustness fix)
+ts.par.CustomKnob.export = 'invalid'  # Raises TypeError (must be numeric)
+ts.exports.update()  # If exception in custom mode, skips silently (robustness fix)
 ```
 
 ### 7. UI Controls
-Create and manage UI elements with factory methods. All support `name` (UI label), `par_name` (optional custom attribute name on `tc.par`, defaults to sanitized `name`), `export` (mode: None/'bind'/'custom', defaults to None), and `export_name` (optional custom output controller name, defaults to `par_name`). If mode is set, adds a controller via `tc.output.add()`.
+Create and manage UI elements with factory methods. All support `name` (UI label), `par_name` (optional custom attribute name on `ts.par`, defaults to sanitized `name`), `export` (mode: None/'bind'/'custom', defaults to None), and `export_name` (optional custom output controller name, defaults to `par_name`). If mode is set, adds a controller via `ts.output.add()`.
 
 For grouped controls, values are accessed internally using qualified keys like `"Group: Control"` to handle hierarchy correctly, but users interact via plain `par.par_name.val`.
 
@@ -169,75 +169,75 @@ For grouped controls, values are accessed internally using qualified keys like `
 **Code Example**:
 ```python
 ui.Knob(name='MyKnob', d=0.5, min=0, max=1, hint='Adjust me')
-print(tc.par.MyKnob.val)  # Access value
+print(ts.par.MyKnob.val)  # Access value
 ```
 Setting `.val` warns (with line number) if outside [min, max] and clamps; no warning on export pushes.
 
 **Edge Case**:
 ```python
-tc.par.MyKnob.val = 1.5  # Warns and clamps to 1
+ts.par.MyKnob.val = 1.5  # Warns and clamps to 1
 ```
 
 #### KnobInt (Integer Slider)
 **Code Example**:
 ```python
 ui.KnobInt(name='MyIntKnob', d=5, min=1, max=10)
-tc.par.MyIntKnob.val = 7  # Sets value (checks int, warns on bounds)
+ts.par.MyIntKnob.val = 7  # Sets value (checks int, warns on bounds)
 ```
 Setting `.val` warns (with line number) if outside [min, max] and clamps; no warning on export pushes.
 
 **Edge Case**:
 ```python
-tc.par.MyIntKnob.val = 11  # Warns and clamps to 10
-tc.par.MyIntKnob.val = 5.5 # Raises ValueError (must be int)
+ts.par.MyIntKnob.val = 11  # Warns and clamps to 10
+ts.par.MyIntKnob.val = 5.5 # Raises ValueError (must be int)
 ```
 
 #### Checkbox (Toggle)
 **Code Example**:
 ```python
 ui.Checkbox(name='MyCheck', d=True, hint='Enable feature')
-if tc.par.MyCheck.val:  # Boolean coercion
+if ts.par.MyCheck.val:  # Boolean coercion
     print("Enabled")
 ```
 Coerces to bool naturally; setting accepts any truthy/falsy value.
 
 **Edge Case**:
 ```python
-tc.par.MyCheck.val = 42  # Sets to True (truthy)
+ts.par.MyCheck.val = 42  # Sets to True (truthy)
 ```
 
 #### Combo (Dropdown Menu)
 **Code Example**:
 ```python
 ui.Combo(name='MyMenu', options=['A', 'B', 'C'], d=1)  # Default index 1 ('B')
-tc.par.MyMenu.val = 0  # Set to index 0 ('A')
-# Or set by label: tc.par.MyMenu.val = 'A' (raises if not in options)
-print(tc.par.MyMenu.options[1])  # 'B'
+ts.par.MyMenu.val = 0  # Set to index 0 ('A')
+# Or set by label: ts.par.MyMenu.val = 'A' (raises if not in options)
+print(ts.par.MyMenu.options[1])  # 'B'
 ```
 Options is list of strings. Default `d` can be int (index, clamped to 0..len-1) or str (matching label, raises if not found). If options empty, defaults to 0; setting requires 0.
 
 **Edge Case**:
 ```python
 ui.Combo(options=[], d=0)  # Empty options, val always 0
-tc.par.MyMenu.val = 'D'   # Raises ValueError (not in options)
-tc.par.MyMenu.val = 3     # Raises ValueError (out of range)
+ts.par.MyMenu.val = 'D'   # Raises ValueError (not in options)
+ts.par.MyMenu.val = 3     # Raises ValueError (out of range)
 ```
 
 #### Text (Input Field)
 **Code Example**:
 ```python
 ui.Text(name='MyText', d='Hello', export='bind', export_default=1.0)
-tc.par.MyText.val = 'World'  # Set text
-print(tc.par.MyText.val)  # 'World'
-# Or change fallback: tc.par.MyText.export_default = 0.5
+ts.par.MyText.val = 'World'  # Set text
+print(ts.par.MyText.val)  # 'World'
+# Or change fallback: ts.par.MyText.export_default = 0.5
 ```
 `.val` is always str. Coercion to float/int may raise if non-numeric (e.g., in arithmetic). In 'bind' mode, attempts float(str(val).strip()), falls back to .export_default (float, default 0.0) if fails. No min/max clamping; setting accepts any str. Unique property: `export_default` (settable float) - fallback for 'bind' on non-numeric input (after stripping spaces).
 
 **Edge Case**:
 ```python
-tc.par.MyText.val = '123'  # In bind, pushes 123.0
-tc.par.MyText.val = 'abc'  # In bind, pushes export_default (e.g., 1.0)
-tc.par.MyText.export_default = 'invalid'  # Raises ValueError (must float)
+ts.par.MyText.val = '123'  # In bind, pushes 123.0
+ts.par.MyText.val = 'abc'  # In bind, pushes export_default (e.g., 1.0)
+ts.par.MyText.export_default = 'invalid'  # Raises ValueError (must float)
 ```
 
 #### Surface (Embedded Control Surface)
@@ -251,15 +251,15 @@ Embed a Control Surface preset for custom UI elements like buttons, XY pads, and
 **Code Example**:
 ```python
 def createDialog():
-    ui = tc.UI()
+    ui = ts.UI()
     ui.Knob(name='Speed', d=0.5)
     ui.Surface()  # embeds the Control Surface preset
     return ui.form
 
 def onTick():
     # Access surface elements by name
-    btn = tc.surface('mybtn')
-    knob = tc.surface('myknob')
+    btn = ts.surface('mybtn')
+    knob = ts.surface('myknob')
     
     print(btn.val)    # read value
     knob.val = 0.5    # set value (normalized 0-1)
@@ -271,11 +271,11 @@ def handleClick():
     print("Clicked!")
 
 # Detect button press (Control Surface)
-btn = tc.surface('mybtn')
+btn = ts.surface('mybtn')
 btn.pulse(on_click=handleClick)
 
 # Detect checkbox click (native UI)
-tc.par.MyCheckbox.pulse(on_click=handleClick)
+ts.par.MyCheckbox.pulse(on_click=handleClick)
 ```
 
 Pulse arguments:
@@ -284,7 +284,7 @@ Pulse arguments:
 **Change Detection** (available on all controls):
 ```python
 def onTick():
-    btn = tc.surface('mybtn')
+    btn = ts.surface('mybtn')
     
     # Detect value changes (fires once per transition)
     if btn.changed():
@@ -294,14 +294,14 @@ def onTick():
             print("Turned off")
     
     # Works on any control type
-    if tc.par.MyKnob.changed():
-        print(f"Knob moved to {tc.par.MyKnob.val}")
+    if ts.par.MyKnob.changed():
+        print(f"Knob moved to {ts.par.MyKnob.val}")
     
-    if tc.par.MyCombo.changed():
-        print(f"Selected option {tc.par.MyCombo.val}")
+    if ts.par.MyCombo.changed():
+        print(f"Selected option {ts.par.MyCombo.val}")
     
     # Optional callback receives (new_val, old_val)
-    tc.par.MyCheck.changed(callback=lambda new, old: print(f"{old} -> {new}"))
+    ts.par.MyCheck.changed(callback=lambda new, old: print(f"{old} -> {new}"))
 ```
 
 Change detection compares the current value to the previous check. Works regardless of FL Studio playback state.
@@ -309,11 +309,11 @@ Change detection compares the current value to the previous check. Works regardl
 **Threshold** (numeric controls only):
 ```python
 # Only detect changes >= threshold (filters small movements)
-if tc.par.Pitch.changed(threshold=12):  # Full octave
-    print(f"Pitch jumped to {tc.par.Pitch.val}")
+if ts.par.Pitch.changed(threshold=12):  # Full octave
+    print(f"Pitch jumped to {ts.par.Pitch.val}")
 
 # Knob 0-100: ignore sub-integer jitter
-if tc.par.MyKnob.changed(threshold=1):
+if ts.par.MyKnob.changed(threshold=1):
     print("Significant change")
 ```
 
@@ -328,16 +328,16 @@ Wrappers support math operations and coercion.
 
 **Code Example**:
 ```python
-print(tc.par.MyKnob + 0.5)  # Adds to value
-if tc.par.MyCheck:  # Bool coercion
-    value = int(tc.par.MyIntKnob) * 2  # Int coercion and mul
+print(ts.par.MyKnob + 0.5)  # Adds to value
+if ts.par.MyCheck:  # Bool coercion
+    value = int(ts.par.MyIntKnob) * 2  # Int coercion and mul
 ```
 Works for numeric wrappers (Knob, KnobInt, Combo index, Checkbox 1.0/0.0). For Text, attempts float(str(val)) but raises on non-numeric (e.g., 'abc' + 1 fails). Comparisons (e.g., par.a == par.b) coerce both sides to float if possible.
 
 **Edge Case**:
 ```python
-tc.par.MyText + 1  # Raises if val non-numeric
-tc.par.MyKnob == tc.par.MyIntKnob  # Coerces both to float for comparison
+ts.par.MyText + 1  # Raises if val non-numeric
+ts.par.MyKnob == ts.par.MyIntKnob  # Coerces both to float for comparison
 ```
 
 ### 9. Grouping
@@ -347,7 +347,7 @@ Context manager for UI groups. Grouped controls use internal qualified keys (e.g
 ```python
 with ui.group('Settings'):
     ui.Knob('InnerKnob')
-print(tc.par.InnerKnob.val)  # Works despite internal qualification
+print(ts.par.InnerKnob.val)  # Works despite internal qualification
 ```
 
 **Edge Case**:
@@ -355,7 +355,7 @@ print(tc.par.InnerKnob.val)  # Works despite internal qualification
 with ui.group('Nested'):
     with ui.group('Inner'):  # Nested groups not fully supported; uses innermost ('Inner')
         ui.Knob('Deep')
-print(tc.par.Deep._form_key())  # 'Inner: Deep' (only innermost group used)
+print(ts.par.Deep._form_key())  # 'Inner: Deep' (only innermost group used)
 ```
 
 ### 10. Parameter Filtering (`pars`)
@@ -369,34 +369,34 @@ Filters:
   - str: Include only parameters in that exact group (e.g., 'test').
   - list[str]: Include parameters in any of the listed groups (e.g., ['test', 'effects']).
 
-Invalid `group` types raise ValueError. Type mapping: 'knob' -> Knob, etc.
+Invalid `group` types raise ValueError. Type mapping: 'knob' -> Knob, ets.
 
 **Code Example**:
 ```python
-all_params = tc.pars()  # All parameters (group='all' implicitly)
-ungrouped = tc.pars(group=None)  # Only ungrouped
-grouped_test = tc.pars(group='test')  # Only in 'test'
-multi_group = tc.pars(group=['a', 'b'])  # In 'a' or 'b'
-knobs = tc.pars('knob')  # All knobs, any group
-dict_view = tc.pars(as_dict=True)  # Dict {par_name: wrapper}
-for p in tc.pars(group=None):
+all_params = ts.pars()  # All parameters (group='all' implicitly)
+ungrouped = ts.pars(group=None)  # Only ungrouped
+grouped_test = ts.pars(group='test')  # Only in 'test'
+multi_group = ts.pars(group=['a', 'b'])  # In 'a' or 'b'
+knobs = ts.pars('knob')  # All knobs, any group
+dict_view = ts.pars(as_dict=True)  # Dict {par_name: wrapper}
+for p in ts.pars(group=None):
     print(p.val)  # Iterate ungrouped
 ```
 
 **Edge Case**:
 ```python
-tc.pars(group=[])  # Returns empty list (no matching groups)
-tc.pars(group=123) # Raises ValueError (invalid type)
-tc.pars(type='invalid')  # Returns empty (no matching type)
-tc.pars(as_dict=True, group=None)  # Dict of ungrouped only
+ts.pars(group=[])  # Returns empty list (no matching groups)
+ts.pars(group=123) # Raises ValueError (invalid type)
+ts.pars(type='invalid')  # Returns empty (no matching type)
+ts.pars(as_dict=True, group=None)  # Dict of ungrouped only
 ```
 
 ### 11. Groups Utility
-`tc.groups()`: Returns sorted list of unique group names (excludes None).
+`ts.groups()`: Returns sorted list of unique group names (excludes None).
 
 **Code Example**:
 ```python
-print(tc.groups())  # e.g., ['Settings', 'test']
+print(ts.groups())  # e.g., ['Settings', 'test']
 ```
 
 **Edge Case**:
@@ -411,8 +411,8 @@ Programmatic MIDI note creation with beat-relative timing.
 Create notes with MIDI number, velocity, length, and optional voice properties.
 
 ```python
-myNote = tc.Note(m=72, v=100, l=1)  # C5, velocity 100, 1 beat (quarter note)
-myNote = tc.Note(midi=60, velocity=80, length=2, p=-0.5)  # Using aliases
+myNote = ts.Note(m=72, v=100, l=1)  # C5, velocity 100, 1 beat (quarter note)
+myNote = ts.Note(midi=60, velocity=80, length=2, p=-0.5)  # Using aliases
 ```
 
 Parameters (aliases in parentheses):
@@ -427,7 +427,7 @@ Parameters (aliases in parentheses):
 
 All aliases work both in constructor and as attributes:
 ```python
-myNote = tc.Note(midi=72, velocity=100)
+myNote = ts.Note(midi=72, velocity=100)
 myNote.midi = 60      # Same as myNote.m = 60
 myNote.x = 0.5        # Same as myNote.fcut = 0.5
 ```
@@ -442,20 +442,20 @@ Beat values:
 | `0.25` | Sixteenth note |
 
 #### Triggering Notes
-Call `.trigger()` to queue a one-shot note, then `tc.update()` in `onTick()` to process.
+Call `.trigger()` to queue a one-shot note, then `ts.update()` in `onTick()` to process.
 
 **Important**: Create Note instances outside `onTick()` so they persist across ticks. This is required for cut behavior to work (voice tracking).
 
 ```python
 # Create once at module level
-myNote = tc.Note(m=72, v=100, l=1)
+myNote = ts.Note(m=72, v=100, l=1)
 
 def onTick():
-    btn = tc.surface('mybtn')
+    btn = ts.surface('mybtn')
     if btn.pulse():
         myNote.trigger()       # Queue the note
         myNote.trigger(l=0.5)  # Override length to half beat
-    tc.update()  # Process triggers and releases
+    ts.update()  # Process triggers and releases
 ```
 
 The note fires immediately and auto-releases after the specified length.
@@ -463,13 +463,13 @@ The note fires immediately and auto-releases after the specified length.
 **Dynamic pitch**: Update properties before triggering:
 
 ```python
-myNote = tc.Note(m=60, v=100, l=1)
+myNote = ts.Note(m=60, v=100, l=1)
 
 def onTick():
-    myNote.m = int(tc.par.PitchKnob.val)  # Update pitch from UI
-    if tc.surface('btn').pulse():
+    myNote.m = int(ts.par.PitchKnob.val)  # Update pitch from UI
+    if ts.surface('btn').pulse():
         myNote.trigger()
-    tc.update()
+    ts.update()
 ```
 
 **Cut behavior** (default): Retriggering a note releases the previous voice first, preventing overlap:
@@ -484,27 +484,27 @@ myNote.trigger(cut=False)   # Allow overlapping voices
 ```python
 def onTriggerVoice(incomingVoice):
     # Arpeggio notes tied to incoming MIDI
-    arp = tc.Note(m=incomingVoice.note + 12)
+    arp = ts.Note(m=incomingVoice.note + 12)
     arp.trigger(parent=incomingVoice)  # Releases when parent releases
 
 def onReleaseVoice(incomingVoice):
     for v in vfx.context.voices:
-        if tc.get_parent(v) == incomingVoice:
+        if ts.get_parent(v) == incomingVoice:
             v.release()
 ```
 
-`tc.get_parent(voice)` returns the parent voice (or `None` for ghost notes). Works with both `tc.MIDI` instances and programmatic notes created with `parent=`.
+`ts.get_parent(voice)` returns the parent voice (or `None` for ghost notes). Works with both `ts.MIDI` instances and programmatic notes created with `parent=`.
 
 Without `parent`, notes are "ghost notes" that release based on their length only.
 
 #### Helper Function
-`tc.beats_to_ticks(beats)`: Convert beats to ticks for advanced timing.
+`ts.beats_to_ticks(beats)`: Convert beats to ticks for advanced timing.
 
 ```python
-ticks = tc.beats_to_ticks(1)  # Returns PPQ (ticks per quarter note)
+ticks = ts.beats_to_ticks(1)  # Returns PPQ (ticks per quarter note)
 ```
 
-**Important**: Always call `tc.update()` in `onTick()` for triggers to fire and voices to release.
+**Important**: Always call `ts.update()` in `onTick()` for triggers to fire and voices to release.
 
 ### 13. Pattern Engine (Mini-Notation)
 Generate rhythmic patterns using Strudel/TidalCycles-inspired mini-notation. Patterns subdivide time cyclically, perfect for arpeggios, sequences, and generative rhythms.
@@ -512,11 +512,11 @@ Generate rhythmic patterns using Strudel/TidalCycles-inspired mini-notation. Pat
 #### Basic Usage
 ```python
 # Standalone pattern (plays absolute MIDI notes)
-pattern = tc.n("60 62 64 65", c=4)  # 4 notes over 4 beats
+pattern = ts.n("60 62 64 65", c=4)  # 4 notes over 4 beats
 pattern.start()
 
 def onTick():
-    tc.update()  # Processes patterns automatically
+    ts.update()  # Processes patterns automatically
 ```
 
 #### Mini-Notation Syntax
@@ -532,15 +532,15 @@ Use standard music notation instead of MIDI numbers:
 | Octave | Optional, defaults to 3 | `c4`, `eb5`, `c` (= c3) |
 
 ```python
-tc.n("c4 d4 e4 f4")     # C major scale: MIDI 60, 62, 64, 65
-tc.n("c#4 eb4 f##4")    # Accidentals: MIDI 61, 63, 67
-tc.n("c d e")           # Default octave 3: MIDI 48, 50, 52
-tc.n("[c4, e4, g4]")    # C major chord (3 simultaneous notes)
+ts.n("c4 d4 e4 f4")     # C major scale: MIDI 60, 62, 64, 65
+ts.n("c#4 eb4 f##4")    # Accidentals: MIDI 61, 63, 67
+ts.n("c d e")           # Default octave 3: MIDI 48, 50, 52
+ts.n("[c4, e4, g4]")    # C major chord (3 simultaneous notes)
 ```
 
 Note names produce **absolute** MIDI values (ignoring `root`), while numbers are **relative** offsets from `root`:
 ```python
-tc.n("c4 0 4 7", root=60)  # c4=60 (absolute), then 60+0, 60+4, 60+7
+ts.n("c4 0 4 7", root=60)  # c4=60 (absolute), then 60+0, 60+4, 60+7
 ```
 
 **Basic Operators:**
@@ -565,75 +565,75 @@ tc.n("c4 0 4 7", root=60)  # c4=60 (absolute), then 60+0, 60+4, 60+7
 
 **Weighting (`@`)**: Within a sequence, `@n` gives an element n times its normal time share:
 ```python
-tc.n("0@2 1")      # 0 gets 2/3 duration, 1 gets 1/3
-tc.n("0 1@3 2")    # 0=1/5, 1=3/5, 2=1/5
-tc.n("0@0 1 2")    # 0 removed (zero weight), 1 and 2 split evenly
+ts.n("0@2 1")      # 0 gets 2/3 duration, 1 gets 1/3
+ts.n("0 1@3 2")    # 0=1/5, 1=3/5, 2=1/5
+ts.n("0@0 1 2")    # 0 removed (zero weight), 1 and 2 split evenly
 ```
 
 **Replicate (`!`)**: Repeats an element n times within its time slot:
 ```python
-tc.n("0!3")        # Three quick notes in one cycle
-tc.n("0!3 1")      # Three 0s in first half, one 1 in second half
-tc.n("[0 1]!2")    # Pattern [0 1] plays twice
+ts.n("0!3")        # Three quick notes in one cycle
+ts.n("0!3 1")      # Three 0s in first half, one 1 in second half
+ts.n("[0 1]!2")    # Pattern [0 1] plays twice
 ```
 
 **Degrade (`?`)**: Probabilistically drops events (deterministic per cycle):
 ```python
-tc.n("0?")         # 50% chance of playing
-tc.n("0?0.75")     # 75% chance of playing  
-tc.n("0 1? 2 3?")  # 1 and 3 are random, 0 and 2 always play
+ts.n("0?")         # 50% chance of playing
+ts.n("0?0.75")     # 75% chance of playing  
+ts.n("0 1? 2 3?")  # 1 and 3 are random, 0 and 2 always play
 ```
 
 **Polyphony (`,`)**: Layer patterns to play simultaneously:
 ```python
-tc.n("[c4, e4, g4]")      # C major chord (3 simultaneous notes)
-tc.n("0, 4, 7")           # Major chord using offsets
-tc.n("0 1 2, 7 8 9")      # Two parallel sequences
-tc.n("[0 1]*2, 3@2 4")    # Complex layering with modifiers
+ts.n("[c4, e4, g4]")      # C major chord (3 simultaneous notes)
+ts.n("0, 4, 7")           # Major chord using offsets
+ts.n("0 1 2, 7 8 9")      # Two parallel sequences
+ts.n("[0 1]*2, 3@2 4")    # Complex layering with modifiers
 ```
 
 **Chord Progressions** with note names:
 ```python
 # Em - Am - Bm - Em/G progression
-tc.n("<[g3,b3,e4] [a3,c4,e4] [b3,d4,f#4] [b3,e4,g4]>")
+ts.n("<[g3,b3,e4] [a3,c4,e4] [b3,d4,f#4] [b3,e4,g4]>")
 ```
 
 #### Relative Patterns with Root
 Values are treated as offsets from `root` (default 60 = C4):
 ```python
-tc.n("0 3 5 7", root=60)  # C E G B (C major 7)
-tc.n("0 4 7", root=48)    # C3 E3 G3
+ts.n("0 3 5 7", root=60)  # C E G B (C major 7)
+ts.n("0 4 7", root=48)    # C3 E3 G3
 ```
 
 #### MIDI-Bound Patterns
 Patterns can follow incoming MIDI notes:
 ```python
 def onTriggerVoice(incomingVoice):
-    midi = tc.MIDI(incomingVoice)
+    midi = ts.MIDI(incomingVoice)
     midi.n("0 3 5 7", c=4)  # Arpeggio from incoming note
     midi.trigger()
 
 def onReleaseVoice(incomingVoice):
     for v in vfx.context.voices:
-        if tc.get_parent(v) == incomingVoice:
+        if ts.get_parent(v) == incomingVoice:
             v.release()
 
 def onTick():
-    tc.update()
+    ts.update()
 ```
 
 The pattern uses the incoming MIDI note as root and stops when the parent voice releases.
 
 #### Nested Patterns
 ```python
-tc.n("60 [61 62] 63")       # Middle element subdivided
-tc.n("[60 61] [62 63 64]")  # Two subdivided groups
-tc.n("<60 [61 62]> 63")     # Alternation with subdivision
+ts.n("60 [61 62] 63")       # Middle element subdivided
+ts.n("[60 61] [62 63 64]")  # Two subdivided groups
+ts.n("<60 [61 62]> 63")     # Alternation with subdivision
 ```
 
 #### Pattern Control
 ```python
-pattern = tc.n("0 3 5 7")
+pattern = ts.n("0 3 5 7")
 pattern.start()           # Begin playback
 pattern.stop()            # Pause
 pattern.reset()           # Restart from beginning
@@ -642,45 +642,45 @@ pattern.reset()           # Restart from beginning
 #### Cycle Duration
 The `c` parameter sets cycle length in beats:
 ```python
-tc.n("60 62 64 65", c=4)  # 4 beats = 1 bar in 4/4
-tc.n("60 62 64", c=2)     # 2 beats = half bar
-tc.n("60 62", c=1)        # 1 beat = quarter note total
+ts.n("60 62 64 65", c=4)  # 4 beats = 1 bar in 4/4
+ts.n("60 62 64", c=2)     # 2 beats = half bar
+ts.n("60 62", c=1)        # 1 beat = quarter note total
 ```
 
 #### Advanced Examples
 ```python
 # Note name melody
-tc.n("c4 e4 g4 c5", c=4)  # C major arpeggio
+ts.n("c4 e4 g4 c5", c=4)  # C major arpeggio
 
 # Chord with note names
-tc.n("[c4, e4, g4]", c=4)  # C major chord
+ts.n("[c4, e4, g4]", c=4)  # C major chord
 
 # Euclidean-style pattern with rests
-tc.n("c4 ~ ~ c4 ~ c4 ~ ~", c=8)  # 3 hits over 8 slots
+ts.n("c4 ~ ~ c4 ~ c4 ~ ~", c=8)  # 3 hits over 8 slots
 
 # Fast arpeggio
-tc.n("c4 e4 g4 c5", c=1)  # Full arpeggio in 1 beat
+ts.n("c4 e4 g4 c5", c=1)  # Full arpeggio in 1 beat
 
 # Weighted sequence
-tc.n("<0@2 1 2 3>", c=4)  # 0 lasts twice as long as others
+ts.n("<0@2 1 2 3>", c=4)  # 0 lasts twice as long as others
 
 # Complex rhythm
-tc.n("c4 [d4 e4]*2 ~ f4", c=4)  # Subdivision with fast modifier
+ts.n("c4 [d4 e4]*2 ~ f4", c=4)  # Subdivision with fast modifier
 
 # Polyphonic arpeggio with random notes
-tc.n("c4 e4 g4 c5, c5?", c=4)  # Arpeggio + random high octave
+ts.n("c4 e4 g4 c5, c5?", c=4)  # Arpeggio + random high octave
 
 # Replicated pattern with weighting
-tc.n("[c4 e4 g4]!2, c3@2 c4", c=4)  # Arp x2 layered with weighted bass
+ts.n("[c4 e4 g4]!2, c3@2 c4", c=4)  # Arp x2 layered with weighted bass
 
 # Probability-based variation
-tc.n("c4 e4? g4 b4?", c=2)  # Root and 5th always, 3rd and 7th random
+ts.n("c4 e4? g4 b4?", c=2)  # Root and 5th always, 3rd and 7th random
 
 # Mixed absolute and relative
-tc.n("c4 0 4 7", root=48)  # c4 absolute (60), then offsets from C3 (48)
+ts.n("c4 0 4 7", root=48)  # c4 absolute (60), then offsets from C3 (48)
 ```
 
-Call `tc.exports.update()` in `onTick()` to push export values. Use unique `par_name` for attribute access. For full code, see TrapCode.py.
+Call `ts.exports.update()` in `onTick()` to push export values. Use unique `par_name` for attribute access. For full code, see trapscript.py.
 
 ### 14. Bus System (Pattern State Access)
 Register patterns to named buses for cross-scope state access. This enables using patterns as programmable state machines—sequencing logic, not just notes.
@@ -690,26 +690,26 @@ Register patterns to named buses for cross-scope state access. This enables usin
 **Voice-Scoped (`midi.n()`)**: Patterns are automatically tied to the incoming voice lifecycle:
 ```python
 def onTriggerVoice(incomingVoice):
-    midi = tc.MIDI(incomingVoice)
+    midi = ts.MIDI(incomingVoice)
     midi.n("<0 1 2 3>", c=4, bus='melody')  # Register to 'melody' bus
 
 def onReleaseVoice(incomingVoice):
-    tc.stop_patterns_for_voice(incomingVoice)  # Auto-cleanup
+    ts.stop_patterns_for_voice(incomingVoice)  # Auto-cleanup
 ```
 
-**Standalone (`tc.n()`)**: Patterns can be tied to a parent voice or persist until `.stop()`:
+**Standalone (`ts.n()`)**: Patterns can be tied to a parent voice or persist until `.stop()`:
 ```python
 # Tied to voice lifecycle
 def onTriggerVoice(v):
-    tc.n("<0 3 5>", c=4, parent=v, bus='melody')
+    ts.n("<0 3 5>", c=4, parent=v, bus='melody')
 
 # Persistent (manual cleanup required)
 _clock = None
 def onTick():
     global _clock
     if _clock is None:
-        _clock = tc.n("<0 1 2 3>", c=1, mute=True, bus='clock')
-    tc.update()
+        _clock = ts.n("<0 1 2 3>", c=1, mute=True, bus='clock')
+    ts.update()
 
 # Manual cleanup
 _clock.stop()
@@ -722,7 +722,7 @@ Use `mute=True` for patterns that track state without producing sound:
 midi.n("<0 1 2 3>", c=1, mute=True, bus='clock')
 
 # In onTick, use as a sequencer clock
-clock = tc.bus('clock').oldest()
+clock = ts.bus('clock').oldest()
 if clock and clock['n'] == [3]:
     print("Beat 4!")
 ```
@@ -732,7 +732,7 @@ if clock and clock['n'] == [3]:
 ```python
 def onTick():
     # Get bus registry (auto-creates if missing)
-    melody = tc.bus('melody')
+    melody = ts.bus('melody')
     
     # Access patterns
     melody.oldest()             # Earliest triggered (or None if empty)
@@ -754,14 +754,14 @@ def onTick():
     melody[0]                   # First chain by index
     melody[-1]                  # Last chain by index
     
-    tc.update()
+    ts.update()
 ```
 
 #### State Access
 
 Access pattern state directly via bracket notation or `.dict()`:
 ```python
-chain = tc.bus('melody').oldest()
+chain = ts.bus('melody').oldest()
 if chain:
     chain['notes']            # Direct access (preferred)
     chain['step']             # Current step index (0-based)
@@ -803,59 +803,59 @@ if chain:
 #### Accessors
 
 ```python
-tc.bus('melody').oldest()  # Earliest triggered chain
-tc.bus('melody').newest()  # Most recently triggered chain
-len(tc.bus('melody'))      # Count of active voices
+ts.bus('melody').oldest()  # Earliest triggered chain
+ts.bus('melody').newest()  # Most recently triggered chain
+len(ts.bus('melody'))      # Count of active voices
 ```
 
 #### History (Released Voices)
 
 ```python
 def onReleaseVoice(v):
-    tc.stop_patterns_for_voice(v)
+    ts.stop_patterns_for_voice(v)
     
     # Access chains from most recent release
-    last = tc.bus('melody').last()
+    last = ts.bus('melody').last()
     if last:
         notes = [c.dict()['notes'] for c in last]
         print(f"Released: {notes}")
 
 # History access
-tc.bus('melody').last()        # Chains from last release
-tc.bus('melody').last(1)       # Second-to-last release
-tc.bus('melody').history()     # All cached releases (newest first)
-tc.bus('melody').history_limit # Max batches kept (default 10)
+ts.bus('melody').last()        # Chains from last release
+ts.bus('melody').last(1)       # Second-to-last release
+ts.bus('melody').history()     # All cached releases (newest first)
+ts.bus('melody').history_limit # Max batches kept (default 10)
 ```
 
 #### All Buses
 
 ```python
-# tc.buses — dict of all registered buses
-for name, bus in tc.buses.items():
+# ts.buses — dict of all registered buses
+for name, bus in ts.buses.items():
     print(f"{name}: {len(bus)} active")
 
 # Check existence without auto-creating
-if 'drums' in tc.buses:
+if 'drums' in ts.buses:
     ...
 
 # Access by name (KeyError if missing)
-tc.buses['drums']
+ts.buses['drums']
 
-# tc.bus() auto-creates, tc.buses[] does not
-tc.bus('new')       # Creates if missing
-tc.buses['missing'] # Raises KeyError
+# ts.bus() auto-creates, ts.buses[] does not
+ts.bus('new')       # Creates if missing
+ts.buses['missing'] # Raises KeyError
 ```
 
 #### Debug Output
 
 ```python
-print(tc.bus('melody'))  # <BusRegistry 'melody': 3 voices>
+print(ts.bus('melody'))  # <BusRegistry 'melody': 3 voices>
 print(chain)             # <PatternChain step=2 notes=[64, 67]>
 ```
 
 #### Parameter Comparison
 
-| Parameter | `midi.n()` | `tc.n()` |
+| Parameter | `midi.n()` | `ts.n()` |
 |-----------|-----------|----------|
 | `c` | Cycle beats | Cycle beats |
 | `root` | Auto (from MIDI note) | Required or default 60 |
@@ -868,5 +868,5 @@ print(chain)             # <PatternChain step=2 notes=[64, 67]>
 | Type | Created in | Tied to | Cleanup |
 |------|-----------|---------|---------|
 | `midi.n()` | `onTriggerVoice` | Incoming voice | Auto via `stop_patterns_for_voice()` |
-| `tc.n(parent=v)` | Anywhere | Specified voice | Auto via `stop_patterns_for_voice()` |
-| `tc.n()` (no parent) | Anywhere | None | Manual via `.stop()` |
+| `ts.n(parent=v)` | Anywhere | Specified voice | Auto via `stop_patterns_for_voice()` |
+| `ts.n()` (no parent) | Anywhere | None | Manual via `.stop()` |

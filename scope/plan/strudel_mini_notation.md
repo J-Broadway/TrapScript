@@ -1,16 +1,16 @@
-# Strudel Mini-Notation for TrapCode
+# Strudel Mini-Notation for TrapScript
 
-Design questions and implementation plan for integrating Strudel-style mini-notation into TrapCode.
+Design questions and implementation plan for integrating Strudel-style mini-notation into TrapScript.
 
 > **Note:** For detailed implementation steps, see `phase1_tier1_implementation.md`. For the original research, see `research docs/studel/Python Implementation of Strudle's Mini-Notation.md` (some code examples there are outdated — the Phase 1 plan has the corrected versions).
 
 ---
 
-## Current TrapCode Infrastructure (Already Solved)
+## Current TrapScript Infrastructure (Already Solved)
 
 These concerns from the research doc are already handled:
 
-| Concern | TrapCode Solution |
+| Concern | TrapScript Solution |
 |---------|------------------|
 | Tick-based processing | `update()` runs per-tick, uses `vfx.context.ticks` |
 | Beat/tick conversion | `beats_to_ticks()` exists, uses `vfx.context.PPQ` |
@@ -23,37 +23,37 @@ These concerns from the research doc are already handled:
 
 ## Naming Conventions ✅ RESOLVED
 
-**Decision:** Rename existing `tc.Note` to `tc.Single` and use `tc.note()` for patterns (Strudel convention).
+**Decision:** Rename existing `ts.Note` to `ts.Single` and use `ts.note()` for patterns (Strudel convention).
 
-| TrapCode | Alias | Type | Description |
+| TrapScript | Alias | Type | Description |
 |----------|-------|------|-------------|
-| `tc.Single(m=60)` | `tc.s(m=60)` | Class | One-shot note (renamed from `tc.Note`) |
-| `tc.note("0 1 2")` | `tc.n("0 1 2")` | Function | Pattern of notes (new, Strudel-style) |
+| `ts.Single(m=60)` | `ts.s(m=60)` | Class | One-shot note (renamed from `ts.Note`) |
+| `ts.note("0 1 2")` | `ts.n("0 1 2")` | Function | Pattern of notes (new, Strudel-style) |
 
 **Rationale:**
 - Follows [Strudel convention](https://strudel.cc/workshop/first-notes/) where `note()` / `n()` creates patterns
-- `tc.s()` doesn't conflict with Strudel's `s()` (sound) since FL Studio can't synthesize sounds
+- `ts.s()` doesn't conflict with Strudel's `s()` (sound) since FL Studio can't synthesize sounds
 - Clear distinction: `Single` = one-shot, `note()` = pattern
 
 **Examples:**
 
 ```python
 # One-shot (imperative)
-tc.Single(m=60, v=100).trigger()
-tc.s(m=60).trigger()  # alias
+ts.Single(m=60, v=100).trigger()
+ts.s(m=60).trigger()  # alias
 
 # Pattern (declarative, Strudel-style)
-tc.note("60 62 64 65", c=4)
-tc.n("0 3 5 7", c=4)  # alias
+ts.note("60 62 64 65", c=4)
+ts.n("0 3 5 7", c=4)  # alias
 
 # Voice-bound pattern
 def onTriggerVoice(incomingVoice):
-    midi = tc.MIDI(incomingVoice)
+    midi = ts.MIDI(incomingVoice)
     midi.n("0 3 5 7", c=4)  # origin = incoming note
     midi.trigger()
 ```
 
-**Migration:** Existing `tc.Note` code will need to change to `tc.Single` or `tc.s`.
+**Migration:** Existing `ts.Note` code will need to change to `ts.Single` or `ts.s`.
 
 ---
 
@@ -64,7 +64,7 @@ def onTriggerVoice(incomingVoice):
 **Decision:** Configurable via `cycle` parameter (alias: `c`), default = 4 beats (1 bar in 4/4).
 
 **Rationale:**
-- Consistent with TrapCode's existing convention: 1 beat = 1 quarter note
+- Consistent with TrapScript's existing convention: 1 beat = 1 quarter note
 - `c=4` means cycle spans 4 beats (1 bar), matching how `Single(l=4)` is a whole note
 - Most rhythmic patterns are naturally "per bar"
 
@@ -72,14 +72,14 @@ def onTriggerVoice(incomingVoice):
 
 ```python
 # Default: 1 cycle = 4 beats (1 bar in 4/4)
-tc.n("0 1 2 3")           # 4 quarter notes across 1 bar
-tc.n("0 1")               # 2 half notes across 1 bar
+ts.n("0 1 2 3")           # 4 quarter notes across 1 bar
+ts.n("0 1")               # 2 half notes across 1 bar
 
 # Override with cycle/c parameter
-tc.n("0 1 2 3", cycle=1)  # 4 sixteenth notes in 1 beat
-tc.n("0 1 2 3", c=1)      # same, using alias
+ts.n("0 1 2 3", cycle=1)  # 4 sixteenth notes in 1 beat
+ts.n("0 1 2 3", c=1)      # same, using alias
 
-tc.n("0 1 2 3", c=8)      # 4 half notes across 2 bars
+ts.n("0 1 2 3", c=8)      # 4 half notes across 2 bars
 ```
 
 **Aliases:**
@@ -98,11 +98,11 @@ tc.n("0 1 2 3", c=8)      # 4 half notes across 2 bars
 | API | Context | `0` means | Use case |
 |-----|---------|-----------|----------|
 | `midi.n("0 1 2 3")` | `onTriggerVoice` | Incoming note + offset | Arpeggios, harmonization |
-| `tc.n("0 1 2 3")` | `onTick` / module scope | MIDI 60 (C5) + offset | Programmatic sequences |
+| `ts.n("0 1 2 3")` | `onTick` / module scope | MIDI 60 (C5) + offset | Programmatic sequences |
 
 **Rationale:**
 - `midi.n()` uses incoming voice as origin — natural for piano roll workflows
-- `tc.n()` follows Strudel convention (0 = C5 / MIDI 60)
+- `ts.n()` follows Strudel convention (0 = C5 / MIDI 60)
 - Negative values go below origin: `-3 -2 -1 0 1 2 3`
 - `~` for rests (Strudel convention)
 
@@ -111,13 +111,13 @@ tc.n("0 1 2 3", c=8)      # 4 half notes across 2 bars
 ```python
 # In onTriggerVoice — origin is incoming note
 def onTriggerVoice(incomingVoice):
-    midi = tc.MIDI(incomingVoice)
+    midi = ts.MIDI(incomingVoice)
     midi.n("0 3 5 7")  # Arpeggio: root, +3, +5, +7 semitones
     midi.trigger()
 
 # Conditional patterns based on incoming note
 def onTriggerVoice(incomingVoice):
-    midi = tc.MIDI(incomingVoice)
+    midi = ts.MIDI(incomingVoice)
     if midi.note < 60:
         midi.n("0 1 2 3")
     else:
@@ -125,11 +125,11 @@ def onTriggerVoice(incomingVoice):
     midi.trigger()
 
 # In onTick — origin is MIDI 60 (C5)
-kick_pattern = tc.n("36 ~ 36 ~", c=4)  # Kick drum pattern
+kick_pattern = ts.n("36 ~ 36 ~", c=4)  # Kick drum pattern
 
 def onTick():
     kick_pattern.tick()
-    tc.update()
+    ts.update()
 ```
 
 **Internal Tick System:**
@@ -151,7 +151,7 @@ Both APIs share the same `Pattern` class. The only differences:
 
 ```python
 def onTriggerVoice(incomingVoice):
-    midi = tc.MIDI(incomingVoice)
+    midi = ts.MIDI(incomingVoice)
     midi.n("0 3 5 7", c=4)  # 4 notes over 4 beats
     midi.trigger()          # First note (0) fires NOW
                             # +3 fires at beat 1
@@ -184,12 +184,12 @@ midi.n("0 3 5 7").quantize()  # Snaps to next beat boundary
 
 **Chained Methods** — polyrhythmic modulation:
 ```python
-tc.n("0 2").v("25 50 75 100")  # 2-note pitch cycle, 4-note velocity cycle
+ts.n("0 2").v("25 50 75 100")  # 2-note pitch cycle, 4-note velocity cycle
 ```
 
 **Precedence:** Object syntax wins. Explicit `{v=100}` is not overridden by `.v()` chain.
 
-**Available Attributes (using TrapCode aliases):**
+**Available Attributes (using TrapScript aliases):**
 
 | Key | Alias for | Range | Description |
 |-----|-----------|-------|-------------|
@@ -205,7 +205,7 @@ Full names also accepted: `{velocity=100, pan=0.25}`
 
 **Polyrhythmic Example:**
 ```python
-tc.n("0 2").v("25 50 75 100")
+ts.n("0 2").v("25 50 75 100")
 # Pitch cycles: [0, 2] (2 events)
 # Velocity cycles: [25, 50, 75, 100] (4 events)
 # Creates evolving combinations over multiple cycles
@@ -213,7 +213,7 @@ tc.n("0 2").v("25 50 75 100")
 
 **Combined Example:**
 ```python
-tc.n("60{v=127} 62 64").v("80 100")
+ts.n("60{v=127} 62 64").v("80 100")
 # Note 60 always v=127 (object wins)
 # Notes 62, 64 cycle through v=80, v=100
 ```
@@ -226,7 +226,7 @@ tc.n("60{v=127} 62 64").v("80 100")
 
 **Behavior:**
 - Patterns use an **internal tick counter** (advances every `onTick()`, works when FL stopped)
-- Standalone patterns (`tc.n()`) require explicit `.start()` to begin
+- Standalone patterns (`ts.n()`) require explicit `.start()` to begin
 - Voice-bound patterns (`midi.n()`) start on `.trigger()` and stop when parent releases
 - `.reset()` available for manual sync
 
@@ -234,11 +234,11 @@ tc.n("60{v=127} 62 64").v("80 100")
 
 ```python
 # Standalone pattern — explicit control
-pattern = tc.n("0 1 2 3", c=4)
+pattern = ts.n("0 1 2 3", c=4)
 
 def onTick():
     pattern.tick()  # Advances internal counter, fires events if started
-    tc.update()
+    ts.update()
 
 # Start/stop control
 pattern.start()   # Begin pattern playback
@@ -247,7 +247,7 @@ pattern.reset()   # Reset to beginning (doesn't start)
 
 # Voice-bound pattern — lifecycle tied to parent
 def onTriggerVoice(incomingVoice):
-    midi = tc.MIDI(incomingVoice)
+    midi = ts.MIDI(incomingVoice)
     midi.n("0 3 5 7", c=4)  # Pattern created
     midi.trigger()          # Pattern starts, first note fires immediately
     # Pattern auto-stops when parent voice releases
@@ -294,11 +294,11 @@ def onTriggerVoice(incomingVoice):
 **Question:** Where does the parser code live?
 
 **Options:**
-- A) Inline in `trapcode.py` (single file, simple deployment)
+- A) Inline in `trapscript.py` (single file, simple deployment)
 - B) Separate module `trapcode_strudel.py` (cleaner separation)
-- C) Lazy import inside `trapcode.py` (optional feature)
+- C) Lazy import inside `trapscript.py` (optional feature)
 
-**Recommendation:** Option A. TrapCode is already a single-file library for easy copy-paste into FL Studio. Keep it that way.
+**Recommendation:** Option A. TrapScript is already a single-file library for easy copy-paste into FL Studio. Keep it that way.
 
 ---
 
@@ -310,10 +310,10 @@ def onTriggerVoice(incomingVoice):
 
 ```python
 # Bad pattern should raise immediately
-pattern = tc.n("0 1 [ 2")  # SyntaxError: Unclosed bracket
+pattern = ts.n("0 1 [ 2")  # SyntaxError: Unclosed bracket
 
 # Runtime errors (e.g., invalid MIDI note) should warn but continue
-pattern = tc.n("200")  # Warning: MIDI note 200 clamped to 127
+pattern = ts.n("200")  # Warning: MIDI note 200 clamped to 127
 ```
 
 ---
@@ -331,7 +331,7 @@ ui.Text("Pattern", par_name="pattern_str", default="60 62 64 65")
 # In onTick()
 if par.pattern_str.changed():
     try:
-        pattern = tc.n(par.pattern_str.val)
+        pattern = ts.n(par.pattern_str.val)
     except SyntaxError as e:
         print(f"[Pattern] {e}")
 ```
@@ -363,13 +363,13 @@ if par.pattern_str.changed():
 - [x] `<a b c>` alternation (simplified: 1-tick arcs never cross cycle boundaries)
 - [x] `*n` and `/n` time scaling
 - [x] `~` and `-` as rest (Strudel-compatible)
-- [ ] Object syntax: `60{v=100, p=0.5}` with TrapCode aliases
+- [ ] Object syntax: `60{v=100, p=0.5}` with TrapScript aliases
 
 ### Phase 3: Integration + Chained Methods (Partial)
-- [x] `tc.n()` entry point (standalone, origin = MIDI 60)
+- [x] `ts.n()` entry point (standalone, origin = MIDI 60)
 - [x] `midi.n()` method (origin = incoming note)
-- [x] Connect events to `tc.Note.trigger()` (Note, not Single — rename not done)
-- [x] Parent voice lifecycle (release pattern when parent releases via `tc.stop_patterns_for_voice()`)
+- [x] Connect events to `ts.Note.trigger()` (Note, not Single — rename not done)
+- [x] Parent voice lifecycle (release pattern when parent releases via `ts.stop_patterns_for_voice()`)
 - [x] Dynamic `c` and `root` parameters accept UI wrappers
 - [ ] Respect `cut` behavior
 - [ ] Chained methods: `.v()`, `.pan()`, `.x()`, `.y()` for polyrhythmic modulation
@@ -399,7 +399,7 @@ Based on the Phase 1 implementation plan (with corrected implementations):
 - Parser: ~100 lines
 - FL Studio integration (tick, time conversion): ~50 lines
 
-**Total: ~330 lines** added to trapcode.py
+**Total: ~330 lines** added to trapscript.py
 
 All pattern code should be placed in a distinct section marked with a separator (see `phase1_tier1_implementation.md` for details).
 

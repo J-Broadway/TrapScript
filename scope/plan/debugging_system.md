@@ -1,16 +1,16 @@
-# TrapCode Debugging System
+# TrapScript Debugging System
 
 ## Overview
 
-A simple, scalable logging system for TrapCode that follows standard design patterns. Provides a global toggle with log levels to control verbosity.
+A simple, scalable logging system for TrapScript that follows standard design patterns. Provides a global toggle with log levels to control verbosity.
 
 ## Public API
 
 ```python
-tc.debug(True)            # Enable debugging, level 1 (default)
-tc.debug(True, level=2)   # Enable debugging, level 2 (verbose)
-tc.debug(False)           # Disable debugging
-tc.debug()                # Query state -> {'enabled': bool, 'level': int}
+ts.debug(True)            # Enable debugging, level 1 (default)
+ts.debug(True, level=2)   # Enable debugging, level 2 (verbose)
+ts.debug(False)           # Disable debugging
+ts.debug()                # Query state -> {'enabled': bool, 'level': int}
 ```
 
 ## Log Levels
@@ -45,7 +45,7 @@ def _log(category: str, msg: str, level: int = 1):
         return
     if level > _debug_level:
         return
-    print(f"[TrapCode:{category}] {msg}")
+    print(f"[TrapScript:{category}] {msg}")
 ```
 
 ### Public Debug Function
@@ -64,10 +64,10 @@ def debug(enable=None, *, level=None):
         None when setting
     
     Examples:
-        tc.debug(True)            # Enable, level 1
-        tc.debug(True, level=2)   # Enable, level 2 (verbose)
-        tc.debug(False)           # Disable
-        tc.debug()                # {'enabled': True, 'level': 2}
+        ts.debug(True)            # Enable, level 1
+        ts.debug(True, level=2)   # Enable, level 2 (verbose)
+        ts.debug(False)           # Disable
+        ts.debug()                # {'enabled': True, 'level': 2}
     """
     global _debug_enabled, _debug_level
     
@@ -144,7 +144,7 @@ _log("patterns", f"TRIGGER note={note_val} duration={duration_beats}", level=1)
 
 These can be added later without breaking the API:
 
-- **Category filtering**: `tc.debug(True, categories=['patterns'])`
+- **Category filtering**: `ts.debug(True, categories=['patterns'])`
 - **Log to file**: Not necessary, Fl Studio VFX environment restricts this behavior
-- **Timestamps**: `tc.debug(True, timestamps=True)`
+- **Timestamps**: `ts.debug(True, timestamps=True)`
 - **Custom formatters**: For structured output

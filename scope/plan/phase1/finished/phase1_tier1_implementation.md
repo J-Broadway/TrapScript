@@ -1,12 +1,12 @@
 # Phase 1 Tier 1: Core Pattern Engine + Basic Operators
 
-Implementation plan for the foundational mini-notation system in TrapCode.
+Implementation plan for the foundational mini-notation system in TrapScript.
 
 ---
 
 ## Code Organization
 
-All Strudel-related pattern code should be placed in a distinct section of `trapcode.py`, marked with a clear separator for organization:
+All Strudel-related pattern code should be placed in a distinct section of `trapscript.py`, marked with a clear separator for organization:
 
 ```python
 # ╔═══════════════════════════════════════════════════════════════════════════╗
@@ -16,7 +16,7 @@ All Strudel-related pattern code should be placed in a distinct section of `trap
 # ╚═══════════════════════════════════════════════════════════════════════════╝
 ```
 
-This keeps the pattern system visually separate from TrapCode's existing voice/MIDI infrastructure.
+This keeps the pattern system visually separate from TrapScript's existing voice/MIDI infrastructure.
 
 ---
 
@@ -35,7 +35,7 @@ Implement a working pattern engine with these operators:
 
 ### Step 1: Core Data Structures
 
-**Files:** `trapcode.py` (or prototype in `scope/scope.py` first)
+**Files:** `trapscript.py` (or prototype in `scope/scope.py` first)
 
 **Deliverables:**
 - [x] `Time` type alias (`Fraction`)
@@ -513,11 +513,11 @@ assert len(fired) == 5  # All 5 notes fire exactly once
 
 ---
 
-### Step 9: tc.n() Entry Point
+### Step 9: ts.n() Entry Point
 
 **Deliverables:**
-- [x] `tc.note(pattern_str, c=4, root=60)` function
-- [x] `tc.n` as alias for `tc.note`
+- [x] `ts.note(pattern_str, c=4, root=60)` function
+- [x] `ts.n` as alias for `ts.note`
 - [x] `c` / `cycle` parameter for cycle duration in beats (supports dynamic UI wrappers)
 - [x] `root` parameter for origin note (default 60 for standalone, supports dynamic UI wrappers)
 - [x] Values in pattern are offsets from `root`
@@ -525,13 +525,13 @@ assert len(fired) == 5  # All 5 notes fire exactly once
 **Test:** Full integration test.
 
 ```python
-# Test: tc.n() creates working pattern
-pattern = tc.n("0 3 5 7", c=4)  # C major 7 arpeggio from C5
+# Test: ts.n() creates working pattern
+pattern = ts.n("0 3 5 7", c=4)  # C major 7 arpeggio from C5
 pattern.start()
 
 def onTick():
     pattern.tick()
-    tc.update()
+    ts.update()
 ```
 
 ---
@@ -541,7 +541,7 @@ def onTick():
 **Deliverables:**
 - [x] `MIDI.n(pattern_str, c=4)` method
 - [x] Uses `self.note` as root (incoming MIDI note)
-- [x] Pattern lifecycle tied to parent voice (via `tc.stop_patterns_for_voice()`)
+- [x] Pattern lifecycle tied to parent voice (via `ts.stop_patterns_for_voice()`)
 - [x] `c` parameter supports dynamic UI wrappers for real-time control
 - [x] First event fires immediately (pattern starts at current tick, processed same frame)
 
@@ -549,7 +549,7 @@ def onTick():
 
 ```python
 def onTriggerVoice(incomingVoice):
-    midi = tc.MIDI(incomingVoice)
+    midi = ts.MIDI(incomingVoice)
     midi.n("0 3 5 7", c=4)  # Arpeggio from incoming note
     midi.trigger()
     # First note fires immediately
@@ -573,12 +573,12 @@ def onTriggerVoice(incomingVoice):
 
 ## Success Criteria
 
-- [x] `tc.n("60 62 64 65", c=4)` plays 4 quarter notes over 1 bar
-- [x] `tc.n("60 [61 62] 63")` correctly subdivides middle element
-- [x] `tc.n("<60 62 64>")` alternates notes each cycle
-- [x] `tc.n("60*4")` plays note 4 times per cycle
-- [x] `tc.n("60/2")` stretches note across 2 cycles
-- [x] `tc.n("60 ~ 62 ~")` plays notes 60 and 62, skips rests
+- [x] `ts.n("60 62 64 65", c=4)` plays 4 quarter notes over 1 bar
+- [x] `ts.n("60 [61 62] 63")` correctly subdivides middle element
+- [x] `ts.n("<60 62 64>")` alternates notes each cycle
+- [x] `ts.n("60*4")` plays note 4 times per cycle
+- [x] `ts.n("60/2")` stretches note across 2 cycles
+- [x] `ts.n("60 ~ 62 ~")` plays notes 60 and 62, skips rests
 - [x] `midi.n("0 3 5 7")` creates arpeggio from incoming note
 - [x] Patterns work when FL transport is stopped (internal tick counter)
 - [x] **Bonus:** Dynamic `c` parameter with cycle-latched updates for smooth risers
@@ -624,7 +624,7 @@ def onTriggerVoice(incomingVoice):
 | 6. Alternation | ~30 | Medium |
 | 7. Modifiers | ~25 | Medium |
 | 8. tick() integration | ~40 | Medium |
-| 9. tc.n() entry | ~20 | Easy |
+| 9. ts.n() entry | ~20 | Easy |
 | 10. midi.n() method | ~30 | Medium |
 | **Total** | **~280** | |
 

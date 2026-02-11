@@ -1,15 +1,15 @@
 ---
-description: TrapCode development workflow
+description: TrapScript development workflow
 alwaysApply: true
 ---
 
-# TrapCode Workflow
+# TrapScript Workflow
 
-TrapCode is a Python library designed to streamline scripting in FL Studio's VFX Script environment. It provides abstractions for MIDI voice handling, UI control creation, parameter management, output controllers, and export proxies. The library aims to reduce boilerplate code while offering intuitive, TouchDesigner-inspired APIs for creative coding in audio/MIDI effects.
+TrapScript is a Python library designed to streamline scripting in FL Studio's VFX Script environment. It provides abstractions for MIDI voice handling, UI control creation, parameter management, output controllers, and export proxies. The library aims to reduce boilerplate code while offering intuitive, TouchDesigner-inspired APIs for creative coding in audio/MIDI effects.
 
-See README.md for TrapCode.py documentation
+See README.md for trapscript.py documentation
 
-`scope.py` is the working environment for TrapCode development. FL Studio's built-in VFX Script editor is limited, so code is written/edited in `scope.py` and copy-pasted into FL Studio's VFX Script.
+`scope.py` is the working environment for TrapScript development. FL Studio's built-in VFX Script editor is limited, so code is written/edited in `scope.py` and copy-pasted into FL Studio's VFX Script.
 
 # VFX Script Documentation
 

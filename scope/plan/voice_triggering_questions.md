@@ -8,13 +8,13 @@ Active questions for the voice triggering API design. Move to `voice_triggering.
 
 **Option A: Simple Factory (current proposal)**
 ```python
-note = tc.Note(72, v=100).trigger()
+note = ts.Note(72, v=100).trigger()
 note.release()
 ```
 
 **Option B: Context-Aware Factory**
 ```python
-with tc.voices() as v:
+with ts.voices() as v:
     v.note(72).trigger()
     v.note(76).trigger()
 # Auto-release all on exit
@@ -22,8 +22,8 @@ with tc.voices() as v:
 
 **Option C: Direct Functions**
 ```python
-handle = tc.trigger(72, v=100)
-tc.release(handle)
+handle = ts.trigger(72, v=100)
+ts.release(handle)
 ```
 
 **Initial leaning**: Option A with Option B available for complex patterns.
@@ -40,27 +40,27 @@ VFX Script provides:
 
 **Option A: Raw ticks**
 ```python
-tc.Note(72).duration(480).trigger()  # 480 ticks
+ts.Note(72).duration(480).trigger()  # 480 ticks
 ```
 
 **Option B: Beat fractions**
 ```python
-tc.Note(72).duration(1/4).trigger()  # Quarter note
-tc.Note(72).duration(1/8).trigger()  # Eighth note
+ts.Note(72).duration(1/4).trigger()  # Quarter note
+ts.Note(72).duration(1/8).trigger()  # Eighth note
 ```
 
 **Option C: Named durations**
 ```python
-tc.Note(72).quarter().trigger()
-tc.Note(72).eighth().trigger()
+ts.Note(72).quarter().trigger()
+ts.Note(72).eighth().trigger()
 ```
 
 **Option D: PPQ-relative constants**
 ```python
-tc.Note(72).duration(tc.Q).trigger()      # Quarter
-tc.Note(72).duration(tc.Q * 1.5).trigger() # Dotted quarter
-tc.Note(72).duration(tc.Q / 3).trigger()   # Triplet eighth
-# Where tc.Q reads PPQ at runtime
+ts.Note(72).duration(ts.Q).trigger()      # Quarter
+ts.Note(72).duration(ts.Q * 1.5).trigger() # Dotted quarter
+ts.Note(72).duration(ts.Q / 3).trigger()   # Triplet eighth
+# Where ts.Q reads PPQ at runtime
 ```
 
 **Sub-questions:**
@@ -79,17 +79,17 @@ Sometimes you want to trigger a note in the future, not immediately.
 
 **Option A: Delay parameter**
 ```python
-tc.Note(72).delay(tc.Q).trigger()  # Trigger 1 beat from now
+ts.Note(72).delay(ts.Q).trigger()  # Trigger 1 beat from now
 ```
 
 **Option B: Schedule at absolute tick**
 ```python
-tc.Note(72).at(1920).trigger()  # Trigger at tick 1920
+ts.Note(72).at(1920).trigger()  # Trigger at tick 1920
 ```
 
 **Option C: Quantized triggering**
 ```python
-tc.Note(72).quantize(tc.bar).trigger()  # Trigger at next bar
+ts.Note(72).quantize(ts.bar).trigger()  # Trigger at next bar
 ```
 
 **Sub-question**: Do we need a central scheduler/queue that processes pending events in `onTick()`?
@@ -104,12 +104,12 @@ How to express "do nothing for X duration"?
 
 **Option A: Explicit rest function**
 ```python
-tc.rest(tc.Q)  # Wait a quarter note before next event
+ts.rest(ts.Q)  # Wait a quarter note before next event
 ```
 
 **Option B: Pattern-based (Strudel-inspired)**
 ```python
-tc.pattern("C4 ~ E4 ~")  # ~ is rest
+ts.pattern("C4 ~ E4 ~")  # ~ is rest
 ```
 
 **Option C: Just use delays**
@@ -130,17 +130,17 @@ tc.pattern("C4 ~ E4 ~")  # ~ is rest
 
 **Option B: Voice pool with stealing**
 ```python
-pool = tc.VoicePool(max=8, steal='oldest')
+pool = ts.VoicePool(max=8, steal='oldest')
 note = pool.note(72).trigger()
 ```
 
 **Option C: Automatic tracking by note number**
 ```python
-# tc.Note(72) always refers to "the C5 voice"
+# ts.Note(72) always refers to "the C5 voice"
 # Re-triggering same note retriggers the existing voice
-tc.Note(72).trigger()  # C5 on
-tc.Note(72).release()  # C5 off
-tc.Note(72).trigger()  # C5 on again (same voice reused)
+ts.Note(72).trigger()  # C5 on
+ts.Note(72).release()  # C5 off
+ts.Note(72).trigger()  # C5 on again (same voice reused)
 ```
 
 **Status**: Open
@@ -150,8 +150,8 @@ tc.Note(72).trigger()  # C5 on again (same voice reused)
 ## Q6: Separation of Concerns
 
 **Current thinking:**
-- `tc.MIDI(incomingVoice)` — for passthrough/modification of incoming notes
-- `tc.Note(...)` — for programmatic note creation
+- `ts.MIDI(incomingVoice)` — for passthrough/modification of incoming notes
+- `ts.Note(...)` — for programmatic note creation
 
 Should these share any base class or API? Or stay completely separate?
 
@@ -165,19 +165,19 @@ Should duration be set on the builder or passed to trigger?
 
 **Option A: Builder method**
 ```python
-tc.Note(72).duration(tc.Q).trigger()
+ts.Note(72).duration(ts.Q).trigger()
 ```
 
 **Option B: Trigger parameter**
 ```python
-tc.Note(72).trigger(duration=tc.Q)
+ts.Note(72).trigger(duration=ts.Q)
 ```
 
 **Option C: Both (builder sets default, trigger can override)**
 ```python
-note_template = tc.Note(72).duration(tc.Q)
+note_template = ts.Note(72).duration(ts.Q)
 note_template.trigger()  # Uses Q
-note_template.trigger(duration=tc.E)  # Overrides to eighth
+note_template.trigger(duration=ts.E)  # Overrides to eighth
 ```
 
 **Status**: Open

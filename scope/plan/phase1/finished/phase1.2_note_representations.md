@@ -1,6 +1,6 @@
 # Phase 1.2: Note Representations
 
-Implementation plan for note name parsing and chord/polyphony notation in TrapCode's mini-notation system.
+Implementation plan for note name parsing and chord/polyphony notation in TrapScript's mini-notation system.
 
 ---
 
@@ -10,10 +10,10 @@ Enable patterns like:
 
 ```python
 # Chord progression with note names
-tc.note("<[g3,b3,e4] [a3,c3,e4] [b3,d3,f#4] [b3,e4,g4]>")
+ts.note("<[g3,b3,e4] [a3,c3,e4] [b3,d3,f#4] [b3,e4,g4]>")
 
 # Simple note names
-tc.n("c4 d4 e4 f4")
+ts.n("c4 d4 e4 f4")
 
 # Mixed with offsets
 midi.n("c4 eb4 g4")  # Absolute notes
@@ -306,10 +306,10 @@ The `,` polyphony operator was added in Phase 1.1. Verify it works correctly wit
 
 ```python
 # Chord: three notes stacked
-tc.n("[c4, e4, g4]")  # C major chord
+ts.n("[c4, e4, g4]")  # C major chord
 
 # Chord progression with alternation
-tc.n("<[g3,b3,e4] [a3,c3,e4] [b3,d3,f#4] [b3,e4,g4]>")
+ts.n("<[g3,b3,e4] [a3,c3,e4] [b3,d3,f#4] [b3,e4,g4]>")
 ```
 
 **How it parses:**
@@ -352,18 +352,18 @@ assert set(e.value for e in events) == {62, 65, 69}
 
 ---
 
-### Step 5: Integration with midi.n() and tc.n()
+### Step 5: Integration with midi.n() and ts.n()
 
 **Behavior clarification:**
 
 | API | Input `"c4 e4 g4"` | Input `"0 4 7"` |
 |-----|-------------------|-----------------|
-| `tc.n()` | Notes as-is (MIDI 60, 64, 67) | Offsets from root=60 (MIDI 60, 64, 67) |
+| `ts.n()` | Notes as-is (MIDI 60, 64, 67) | Offsets from root=60 (MIDI 60, 64, 67) |
 | `midi.n()` | Notes as-is (ignores root) | Offsets from incoming note |
 
 **Decision:** Note names are **absolute** — they represent specific MIDI pitches, not offsets. Numbers remain relative to root.
 
-**Implementation update in tc.n():**
+**Implementation update in ts.n():**
 
 ```python
 def note(pattern_str: str, c=4, root=60) -> Pattern:
@@ -501,7 +501,7 @@ def test_mixed_numbers_and_notes():
 def test_chord_triggering():
     """Chords trigger multiple voices."""
     # In FL Studio, each note in a chord should trigger a separate voice
-    pattern = tc.n("[c4, e4, g4]", c=4)
+    pattern = ts.n("[c4, e4, g4]", c=4)
     pattern.start()
     
     # Simulate tick — should fire 3 notes at tick 0
@@ -525,11 +525,11 @@ def test_chord_triggering():
 
 ## Success Criteria
 
-- [ ] `tc.n("c4 d4 e4 f4")` plays C major scale starting at C4
-- [ ] `tc.n("c#4 eb4 f##4")` handles all accidental types
-- [ ] `tc.n("[c4, e4, g4]")` plays C major chord (3 simultaneous notes)
-- [ ] `tc.n("<[g3,b3,e4] [a3,c3,e4]>")` alternates between Em and Am chords
-- [ ] `tc.n("c4 0 2 4")` mixes absolute notes with relative offsets
+- [ ] `ts.n("c4 d4 e4 f4")` plays C major scale starting at C4
+- [ ] `ts.n("c#4 eb4 f##4")` handles all accidental types
+- [ ] `ts.n("[c4, e4, g4]")` plays C major chord (3 simultaneous notes)
+- [ ] `ts.n("<[g3,b3,e4] [a3,c3,e4]>")` alternates between Em and Am chords
+- [ ] `ts.n("c4 0 2 4")` mixes absolute notes with relative offsets
 - [ ] `midi.n("c4 e4 g4")` plays absolute notes regardless of incoming pitch
 - [ ] Existing numeric patterns continue to work unchanged
 

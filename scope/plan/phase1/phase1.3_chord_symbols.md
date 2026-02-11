@@ -1,6 +1,6 @@
 # Phase 1.3: Chord Symbols & Voicings
 
-Design document for implementing Strudel-style chord symbols and voicing functions in TrapCode.
+Design document for implementing Strudel-style chord symbols and voicing functions in TrapScript.
 
 ---
 
@@ -9,7 +9,7 @@ Design document for implementing Strudel-style chord symbols and voicing functio
 Enable chord-based patterns with automatic voicing selection:
 
 ```python
-tc.midi.chord("<Am C D F Am E Am E>").voicing()
+ts.midi.chord("<Am C D F Am E Am E>").voicing()
 ```
 
 ---
@@ -91,7 +91,7 @@ Chord symbols consist of: `[root][quality]`
 
 ### Decision: Embed Full Dictionary
 
-The complete Strudel-compatible dictionary will be embedded in `trapcode.py`. Performance impact is negligible (O(1) dict lookup), only adds ~200-300 lines of static data.
+The complete Strudel-compatible dictionary will be embedded in `trapscript.py`. Performance impact is negligible (O(1) dict lookup), only adds ~200-300 lines of static data.
 
 ### Available Chord Symbols
 
@@ -152,14 +152,14 @@ Multiple voicings per chord type enables voice leading — the system picks the 
 ### 2. API Surface for Phase 1.3 vs 1.4
 
 **Phase 1.3 (Core):**
-- `tc.midi.chord()` — parse chord symbols in patterns
+- `ts.midi.chord()` — parse chord symbols in patterns
 - `.voicing()` — basic voicing with embedded dictionary
 - `anchor` parameter
 - `mode` parameter
 
 **Phase 1.4 (Extended):**
 - `.dict()` — select alternative voicing dictionary
-- `tc.addVoicings()` — register custom voicing dictionaries
+- `ts.addVoicings()` — register custom voicing dictionaries
 - `offset` parameter
 - `n` parameter (pick individual notes from chord)
 
@@ -173,13 +173,13 @@ Chord patterns should work within the existing mini-notation:
 
 ```python
 # Alternation works
-tc.midi.chord("<Am C D F>").voicing()
+ts.midi.chord("<Am C D F>").voicing()
 
 # Subdivision works  
-tc.midi.chord("[Am C] [D F]").voicing()
+ts.midi.chord("[Am C] [D F]").voicing()
 
 # Time modifiers work
-tc.midi.chord("Am*2 C").voicing()
+ts.midi.chord("Am*2 C").voicing()
 ```
 
 The `chord()` function produces a pattern of chord symbols, and `.voicing()` transforms those symbols into polyphonic note patterns.

@@ -1,23 +1,23 @@
-# TrapCode boilerplate
+# TrapScript boilerplate
 import flvfx as vfx
-import trapcode as tc
+import trapscript as ts
 
 def createDialog():
-    ui = tc.UI()
+    ui = ts.UI()
     # Add controls here
     # ui.Knob(name='MyKnob', d=0.5, min=0, max=1)
     return ui.form
 
 def onTriggerVoice(incomingVoice):
-    midi = tc.MIDI(incomingVoice)
-    tc.n("0 3 5 <3 5>", c=4)
+    midi = ts.MIDI(incomingVoice)
+    ts.n("0 3 5 <3 5>", c=4)
     # midi.trigger()
 
 def onReleaseVoice(incomingVoice):
-    tc.stop_patterns_for_voice(incomingVoice)
+    ts.stop_patterns_for_voice(incomingVoice)
     for v in vfx.context.voices:
-        if tc.get_parent(v) == incomingVoice:
+        if ts.get_parent(v) == incomingVoice:
             v.release()
 
 def onTick():
-    tc.update()
+    ts.update()

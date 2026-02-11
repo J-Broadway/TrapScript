@@ -1,6 +1,6 @@
 # Python Implementation of Strudel's Mini-Notation
 
-This document provides the architectural foundation and implementation strategy for **Trapcode**, a pure-Python 3.12 realization of the TidalCycles/Strudel temporal calculus. It is designed specifically for execution within FL Studio's VFX Script sandbox (Python 3.12.1, no external dependencies).
+This document provides the architectural foundation and implementation strategy for **TrapScript**, a pure-Python 3.12 realization of the TidalCycles/Strudel temporal calculus. It is designed specifically for execution within FL Studio's VFX Script sandbox (Python 3.12.1, no external dependencies).
 
 > **⚠️ NOTE:** Some code examples in this document have been superseded by improved implementations. See `scope/plan/phase1_tier1_implementation.md` for the corrected versions, particularly:
 > - `Pattern.pure()` — must handle multi-cycle queries correctly

@@ -1,6 +1,6 @@
 # Strudel & SuperCollider Research
 
-Combined research on note triggering patterns from Strudel and SuperCollider for TrapCode voice API design.
+Combined research on note triggering patterns from Strudel and SuperCollider for TrapScript voice API design.
 
 ---
 
@@ -197,7 +197,7 @@ Pbind(\dur, Pseq([1, Rest(1), 1, 1], inf))
 
 ---
 
-## Key Insights for TrapCode
+## Key Insights for TrapScript
 
 ### What Translates Well to Tick-Based
 

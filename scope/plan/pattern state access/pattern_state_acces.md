@@ -12,7 +12,7 @@ Enable `.n()` patterns (and chained modifiers like `.v()`, `.pan()`, `.chord()`)
 
 ### Creating Patterns with Bus Registration
 
-Two entry points: `midi.n()` (voice-scoped) and `tc.n()` (standalone).
+Two entry points: `midi.n()` (voice-scoped) and `ts.n()` (standalone).
 
 #### Voice-Scoped: `midi.n()` (in onTriggerVoice)
 
@@ -20,7 +20,7 @@ Pattern is automatically tied to the incoming voice lifecycle:
 
 ```python
 def onTriggerVoice(incomingVoice):
-    midi = tc.MIDI(incomingVoice)
+    midi = ts.MIDI(incomingVoice)
     
     # Register pattern to bus (tied to incomingVoice)
     midi.n("<0 1 2 3>", c=4, bus='melody')
@@ -32,29 +32,29 @@ def onTriggerVoice(incomingVoice):
     midi.n("<0 1 2 3>").v("<100 50 75>").pan("<-1 0 1>", bus='complex')
 
 def onReleaseVoice(incomingVoice):
-    tc.stop_patterns_for_voice(incomingVoice)  # Auto-cleanup
+    ts.stop_patterns_for_voice(incomingVoice)  # Auto-cleanup
 ```
 
-#### Standalone: `tc.n()` (in onTick or globally)
+#### Standalone: `ts.n()` (in onTick or globally)
 
 Pattern lifecycle is manual or optionally tied to a parent voice:
 
 ```python
 # Option 1: Tied to a parent voice (cleaned up on release)
 def onTriggerVoice(v):
-    tc.n("<0 3 5>", c=4, parent=v, bus='melody')  # Explicitly tied to v
+    ts.n("<0 3 5>", c=4, parent=v, bus='melody')  # Explicitly tied to v
 
 # Option 2: Truly standalone (persists until .stop())
 _clock = None
 def onTick():
     global _clock
     if _clock is None:
-        _clock = tc.n("<0 1 2 3>", c=1, mute=True, bus='clock')
+        _clock = ts.n("<0 1 2 3>", c=1, mute=True, bus='clock')
     
     if _clock:  # onset
         print(f"Beat {_clock['step']}")
     
-    tc.update()
+    ts.update()
 
 # Manual cleanup for standalone patterns
 _clock.stop()  # Removes from bus and stops ticking
@@ -62,7 +62,7 @@ _clock.stop()  # Removes from bus and stops ticking
 
 #### Parameter Comparison
 
-| Parameter | `midi.n()` | `tc.n()` |
+| Parameter | `midi.n()` | `ts.n()` |
 |-----------|-----------|----------|
 | `c` | Cycle beats | Cycle beats |
 | `root` | Auto (from MIDI note) | Required or default 60 |
@@ -75,15 +75,15 @@ _clock.stop()  # Removes from bus and stops ticking
 | Type | Created in | Tied to | Cleanup |
 |------|-----------|---------|---------|
 | `midi.n()` | `onTriggerVoice` | Incoming voice | Auto via `stop_patterns_for_voice()` |
-| `tc.n(parent=v)` | Anywhere | Specified voice | Auto via `stop_patterns_for_voice()` |
-| `tc.n()` (no parent) | Anywhere | None | Manual via `.stop()` |
+| `ts.n(parent=v)` | Anywhere | Specified voice | Auto via `stop_patterns_for_voice()` |
+| `ts.n()` (no parent) | Anywhere | None | Manual via `.stop()` |
 
 ### Accessing Bus State
 
 ```python
 def onTick():
     # Get bus registry (returns BusRegistry, never None)
-    melody = tc.bus('melody')
+    melody = ts.bus('melody')
     
     # Access patterns
     melody.oldest()             # Earliest triggered (or None if empty)
@@ -108,13 +108,13 @@ def onTick():
     # Debug output
     print(melody)                   # <BusRegistry 'melody': 3 voices>
     
-    tc.update()
+    ts.update()
 ```
 
 ### PatternChain Methods
 
 ```python
-chain = tc.bus('melody').oldest()  # Or .newest()
+chain = ts.bus('melody').oldest()  # Or .newest()
 
 # Direct key access (via __getitem__)
 chain['n']                      # Same as chain.dict()['n']
@@ -145,32 +145,32 @@ print(chain)                    # <PatternChain step=2 notes=[64, 67]>
 
 ```python
 # After voices are released, access history
-tc.bus('melody').last()         # List of chains from most recent release
-tc.bus('melody').last(1)        # Second-most recent release batch
-tc.bus('melody').history()      # All cached batches (newest first)
-tc.bus('melody').history_limit  # Max batches kept (default 10)
+ts.bus('melody').last()         # List of chains from most recent release
+ts.bus('melody').last(1)        # Second-most recent release batch
+ts.bus('melody').history()      # All cached batches (newest first)
+ts.bus('melody').history_limit  # Max batches kept (default 10)
 ```
 
 ### Global Bus Access
 
 ```python
-# tc.buses — dict-like container of all registered buses
-tc.buses                        # Returns dict {name: BusRegistry, ...}
-tc.buses['drums']               # Access by name (KeyError if missing)
-tc.buses.get('drums')           # Access by name (None if missing)
-tc.buses.keys()                 # All bus names
+# ts.buses — dict-like container of all registered buses
+ts.buses                        # Returns dict {name: BusRegistry, ...}
+ts.buses['drums']               # Access by name (KeyError if missing)
+ts.buses.get('drums')           # Access by name (None if missing)
+ts.buses.keys()                 # All bus names
 
 # Iterate all buses
-for name, bus in tc.buses.items():
+for name, bus in ts.buses.items():
     print(f"{name}: {len(bus)} active, {len(bus.history())} released")
 
 # Check existence without auto-creating
-if 'drums' in tc.buses:
+if 'drums' in ts.buses:
     ...
 
-# Difference from tc.bus():
-# tc.bus('name')    — auto-creates if missing (convenient for registration)
-# tc.buses['name']  — raises KeyError if missing (explicit check)
+# Difference from ts.bus():
+# ts.bus('name')    — auto-creates if missing (convenient for registration)
+# ts.buses['name']  — raises KeyError if missing (explicit check)
 ```
 
 ---
@@ -294,7 +294,7 @@ class PatternChain:
         return current != previous
     
     def tick(self, current_tick: int, ppq: int, cycle_beats: float):
-        """Update state for this tick. Called by tc.update()."""
+        """Update state for this tick. Called by ts.update()."""
         # Store previous state for change detection
         self._prev_state = self._state.copy()
         
@@ -356,14 +356,14 @@ class PatternChain:
         """
         Stop the pattern and remove from bus.
         
-        For standalone patterns (tc.n without parent), this is required
+        For standalone patterns (ts.n without parent), this is required
         for cleanup. Voice-scoped patterns are cleaned up automatically.
         """
         self._running = False
         
         # Remove from bus if registered
         if self._bus_name and self._bus_voice_id:
-            bus = tc.bus(self._bus_name)
+            bus = ts.bus(self._bus_name)
             if self._bus_voice_id in bus:
                 del bus[self._bus_voice_id]
         
@@ -382,7 +382,7 @@ class BusRegistry(dict):
         self._history = []            # List of release batches
         self.history_limit = 10       # Max batches to keep
         self._voice_counter = 0       # For unique IDs
-        self.name = ''                # Set when registered via tc.bus()
+        self.name = ''                # Set when registered via ts.bus()
     
     # --- Dunder methods for Pythonic access ---
     
@@ -393,7 +393,7 @@ class BusRegistry(dict):
     def __getitem__(self, key):
         """Access by index (int) or voice_id (tuple)."""
         if isinstance(key, int):
-            # tc.bus('clock')[0] — get by index
+            # ts.bus('clock')[0] — get by index
             values = list(self.values())
             if not values or key >= len(values) or key < -len(values):
                 raise IndexError(f"Bus index {key} out of range")
@@ -465,13 +465,13 @@ class BusRegistry(dict):
 
 ```python
 class BusContainer(dict):
-    """Dict-like container for all buses. Accessed via tc.buses."""
+    """Dict-like container for all buses. Accessed via ts.buses."""
     pass
 
 # Module-level storage
 _buses = BusContainer()  # bus_name -> BusRegistry
 
-# Expose as tc.buses
+# Expose as ts.buses
 buses = _buses
 
 def bus(name: str) -> BusRegistry:
@@ -482,7 +482,7 @@ def bus(name: str) -> BusRegistry:
     return _buses[name]
 ```
 
-### 4. Standalone tc.n() Function
+### 4. Standalone ts.n() Function
 
 ```python
 def n(pattern_str: str, c=4, root=60, parent=None, mute=False, bus=None) -> PatternChain:
@@ -504,7 +504,7 @@ def n(pattern_str: str, c=4, root=60, parent=None, mute=False, bus=None) -> Patt
     chain.n(pattern_str, c=c, root=root)
     
     if bus:
-        voice_id = tc.bus(bus).register(chain)
+        voice_id = ts.bus(bus).register(chain)
         chain._bus_name = bus
         chain._bus_voice_id = voice_id
     
@@ -524,7 +524,7 @@ class MIDI:
         chain.n(pattern_str, c=c, root=root or self.note, **kwargs)
         
         if bus:
-            voice_id = tc.bus(bus).register(chain)
+            voice_id = ts.bus(bus).register(chain)
             chain._bus_name = bus
             chain._bus_voice_id = voice_id
             self._bus_registrations.append((bus, voice_id))
@@ -540,7 +540,7 @@ class MIDI:
         chain.chord(pattern_str, c=c, **kwargs)
         
         if bus:
-            voice_id = tc.bus(bus).register(chain)
+            voice_id = ts.bus(bus).register(chain)
             chain._bus_name = bus
             chain._bus_voice_id = voice_id
             self._bus_registrations.append((bus, voice_id))
@@ -554,7 +554,7 @@ class MIDI:
 
 ```python
 def _update_pattern_chains():
-    """Called by tc.update() to tick all active chains."""
+    """Called by ts.update() to tick all active chains."""
     current_tick = _get_current_tick()
     ppq = vfx.context.PPQ
     
@@ -569,7 +569,7 @@ def stop_patterns_for_voice(parent_voice):
     
     # Release from buses
     for bus_name, bus_voice_id in _voice_bus_map.get(voice_id, []):
-        tc.bus(bus_name).release(bus_voice_id, release_tick)
+        ts.bus(bus_name).release(bus_voice_id, release_tick)
     
     # Clean up pattern registry
     # ... existing cleanup logic
@@ -582,7 +582,7 @@ def stop_patterns_for_voice(parent_voice):
 ### Phase 1: Core Infrastructure
 1. Implement `PatternChain` class with base state
 2. Implement `BusRegistry` class
-3. Add global `tc.bus()` accessor
+3. Add global `ts.bus()` accessor
 4. Integrate with existing `MIDI.n()` method
 
 ### Phase 2: Chain Methods
@@ -607,62 +607,62 @@ def stop_patterns_for_voice(parent_voice):
 ### Basic State Access
 ```python
 def onTriggerVoice(v):
-    midi = tc.MIDI(v)
+    midi = ts.MIDI(v)
     midi.n("<0 3 5 7>", c=4, bus='test')
 
 def onTick():
-    chain = tc.bus('test').oldest()
+    chain = ts.bus('test').oldest()
     if chain and chain.changed():
         print(f"Step {chain.dict()['step']}: {chain.dict()['notes']}")
-    tc.update()
+    ts.update()
 ```
 
 ### Ghost Pattern for Logic
 ```python
 def onTriggerVoice(v):
-    midi = tc.MIDI(v)
+    midi = ts.MIDI(v)
     midi.n("<0 1 2 3>", c=1, mute=True, bus='clock')
 
 def onTick():
-    clock = tc.bus('clock').oldest()
+    clock = ts.bus('clock').oldest()
     if clock and clock.dict()['n'] == [3]:
         print("Fourth beat!")
-    tc.update()
+    ts.update()
 ```
 
 ### Multi-Voice Handling
 ```python
 def onTick():
-    melody = tc.bus('melody')
+    melody = ts.bus('melody')
     print(f"Active voices: {len(melody)}")
     for vid, chain in sorted(melody.items()):
         print(f"  {vid}: notes={chain.dict()['notes']}")
-    tc.update()
+    ts.update()
 ```
 
 ### History Access
 ```python
 def onReleaseVoice(v):
-    tc.stop_patterns_for_voice(v)
+    ts.stop_patterns_for_voice(v)
     
     # Check what just released
-    last = tc.bus('melody').last()
+    last = ts.bus('melody').last()
     if last:
         notes = [c.dict()['notes'] for c in last]
         print(f"Released: {notes}")
 ```
 
-### Standalone tc.n() with Parent Voice
+### Standalone ts.n() with Parent Voice
 ```python
 def onTriggerVoice(v):
     # Standalone pattern tied to voice lifecycle
-    tc.n("<0 3 5>", c=4, parent=v, bus='melody')
+    ts.n("<0 3 5>", c=4, parent=v, bus='melody')
 
 def onReleaseVoice(v):
-    tc.stop_patterns_for_voice(v)  # Cleans up tc.n(parent=v) patterns too
+    ts.stop_patterns_for_voice(v)  # Cleans up ts.n(parent=v) patterns too
 ```
 
-### Standalone tc.n() Persistent (Global Clock)
+### Standalone ts.n() Persistent (Global Clock)
 ```python
 _clock = None
 
@@ -671,13 +671,13 @@ def onTick():
     
     # Create once, persists across all voices
     if _clock is None:
-        _clock = tc.n("<0 1 2 3>", c=1, mute=True, bus='clock')
+        _clock = ts.n("<0 1 2 3>", c=1, mute=True, bus='clock')
     
     # React to clock steps
     if _clock:
         print(f"Beat {_clock['step'] + 1}")
     
-    tc.update()
+    ts.update()
 
 # Manual cleanup when needed
 def cleanup():
@@ -704,14 +704,14 @@ Register patterns to named buses for cross-scope state access:
 
 ```python
 def onTriggerVoice(v):
-    midi = tc.MIDI(v)
+    midi = ts.MIDI(v)
     midi.n("<0 3 5 7>", c=4, bus='melody')
 
 def onTick():
-    chain = tc.bus('melody').oldest()
+    chain = ts.bus('melody').oldest()
     if chain:  # Truthy when onset occurred
         print(chain['notes'])
-    tc.update()
+    ts.update()
 ```
 
 ### Ghost Patterns (State-Only)
@@ -722,7 +722,7 @@ Use `mute=True` for patterns that track state without producing sound:
 midi.n("<0 1 2 3>", c=1, mute=True, bus='clock')
 
 # In onTick, use as a sequencer clock
-clock = tc.bus('clock').oldest()
+clock = ts.bus('clock').oldest()
 if clock and clock['n'] == [3]:
     print("Beat 4!")
 ```
@@ -757,42 +757,42 @@ if chain:
 
 ```python
 # Iterate chains directly
-for chain in tc.bus('melody'):
+for chain in ts.bus('melody'):
     print(chain['notes'])
 
 # With voice IDs
-for voice_id, chain in tc.bus('melody').items():
+for voice_id, chain in ts.bus('melody').items():
     print(f"{voice_id}: {chain['notes']}")
 
 # Index access
-tc.bus('melody')[0]       # First chain
-tc.bus('melody')[-1]      # Last chain
+ts.bus('melody')[0]       # First chain
+ts.bus('melody')[-1]      # Last chain
 ```
 
 ### Accessors
 
 ```python
-tc.bus('melody').oldest() # Earliest triggered
-tc.bus('melody').newest() # Most recently triggered
-len(tc.bus('melody'))     # Count of active voices
+ts.bus('melody').oldest() # Earliest triggered
+ts.bus('melody').newest() # Most recently triggered
+len(ts.bus('melody'))     # Count of active voices
 ```
 
 ### History (Released Voices)
 
 ```python
-tc.bus('melody').last()    # Chains from last release
-tc.bus('melody').last(1)   # Second-to-last release
-tc.bus('melody').history() # All cached releases
+ts.bus('melody').last()    # Chains from last release
+ts.bus('melody').last(1)   # Second-to-last release
+ts.bus('melody').history() # All cached releases
 ```
 
 ### All Buses
 
 ```python
-for name, bus in tc.buses.items():
+for name, bus in ts.buses.items():
     print(f"{name}: {len(bus)} active")
 
 # Debug output
-print(tc.bus('melody'))   # <BusRegistry 'melody': 3 voices>
+print(ts.bus('melody'))   # <BusRegistry 'melody': 3 voices>
 print(chain)              # <PatternChain step=2 notes=[64, 67]>
 ```
 ```
@@ -801,7 +801,7 @@ print(chain)              # <PatternChain step=2 notes=[64, 67]>
 
 ## References
 
-- Current `has_onset()`: `trapcode.py` lines 1020-1027
-- Current `Pattern.tick()`: `trapcode.py` lines 1330-1400
-- Current `_midi_patterns`: `trapcode.py` lines 1842, 1903
+- Current `has_onset()`: `trapscript.py` lines 1020-1027
+- Current `Pattern.tick()`: `trapscript.py` lines 1330-1400
+- Current `_midi_patterns`: `trapscript.py` lines 1842, 1903
 - FL Studio VFX API: https://www.image-line.com/fl-studio-learning/fl-studio-beta-online-manual/html/plugins/VFX%20Script.htm

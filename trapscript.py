@@ -17,7 +17,7 @@ def _warn_clamp(name, value, lo, hi):
     if value < lo or value > hi:
         caller = inspect.stack()[2] if len(inspect.stack()) >= 3 else None
         where = f" (line {caller.lineno})" if caller else ""
-        print(f"[TrapCode]{where} '{name}' value {value} outside [{lo}, {hi}] -> clamped")
+        print(f"[TrapScript]{where} '{name}' value {value} outside [{lo}, {hi}] -> clamped")
 
 # -----------------------------
 # Debug System
@@ -38,7 +38,7 @@ def _log(category: str, msg: str, level: int = 1):
         return
     if level > _debug_level:
         return
-    print(f"[TrapCode:{category}] {msg}")
+    print(f"[TrapScript:{category}] {msg}")
 
 def debug(enable=None, *, level=None):
     """
@@ -91,7 +91,7 @@ class PulseMixin:
                 try:
                     on_click()
                 except Exception as e:
-                    print(f"[TrapCode] pulse on_click error: {e}")
+                    print(f"[TrapScript] pulse on_click error: {e}")
             return True
         return False
 
@@ -139,7 +139,7 @@ class EdgeMixin:
                 try:
                     callback(current, prev)
                 except Exception as e:
-                    print(f"[TrapCode] changed callback error: {e}")
+                    print(f"[TrapScript] changed callback error: {e}")
         return did_change
 
 # -----------------------------
@@ -804,7 +804,7 @@ def _check_update_reminder():
     """Show one-time reminder if update() hasn't been called yet."""
     global _reminder_shown
     if not _update_called and not _reminder_shown:
-        print("[TrapCode] Reminder: Call tc.update() in onTick() for triggers to fire")
+        print("[TrapScript] Reminder: Call tc.update() in onTick() for triggers to fire")
         _reminder_shown = True
 
 
@@ -2608,4 +2608,4 @@ def update():
 
 
 # Initialization message
-print("[TrapCode] Initialized")
+print("[TrapScript] Initialized")
