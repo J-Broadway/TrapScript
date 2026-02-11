@@ -1,6 +1,5 @@
-- Consolodate ts.exports.update() into ts.update() to reduce boilerplate
-- [x] midi.n(f"<c4 c#4 d4 eb4>/{ts.par.Cycle}") should work similar to midi.n(f"<c4 c#4 d4 eb4>", c=ts.par.Cycle) in that value is grabbed after every cycle to refresh speed
-- Look into ts.n() and see if .trigger() is explicitly needed to start the pattern or if it auto triggers on compile (similar to strudel). If auto-triggers consider auto_start=True flag, that way users can set it to false then explicitly trigger with .trigger() as well as functions like:
-    - .stop() # stops pattern and resets to beginning
-    - .pause() # pauses pattern but maintains its position
-    - .trigger() # resets to start while continuously playing
+- [ ] Consolodate ts.exports.update() into ts.update() to reduce boilerplate
+- [ ] Allow add `bpm` to `ts.MIDI` where sepcifying `bpm` will use an internal function to appropriately convert to `cycle`.
+`bpm` and `cycle` cannot be defined together it has to be one or the other
+midi = ts.MIDI(incomingVoice, bpm=ts.Context.bpm) # we still need to implement ts.Context
+midi = ts.MIDI(incomingVoice, bpm=ts.Context.bpm, cycle=1) # cannot use both 

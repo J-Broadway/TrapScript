@@ -10,7 +10,6 @@ def createDialog():
 
 def onTriggerVoice(incomingVoice):
     midi = ts.MIDI(incomingVoice)
-    ts.n("0 3 5 <3 5>", c=4)
     # midi.trigger()
 
 def onReleaseVoice(incomingVoice):
@@ -21,3 +20,14 @@ def onReleaseVoice(incomingVoice):
 
 def onTick():
     ts.update()
+
+
+
+def onTriggerVoice(incomingVoice):
+    midi_in = incomingVoice
+    if midi_in.color == 0:
+        midi_out = ts.MIDI(midi_in, cycle=0.75, scale="c:major")
+        midi_out.n("0 3 5 7") # notes locked to c:major scale
+    if midi_in.color == 1:
+        midi_out = ts.MIDI(midi_in, cycle=0.75, scale="c:minor")
+        midi_out.n("0 3 5 7", c=1) # notes locked to c:minor scale parent cycle overrided by child
