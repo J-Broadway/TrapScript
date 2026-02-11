@@ -61,8 +61,8 @@ Full search/replace needed:
 - [ ] "TrapCode" → "TrapScript" (title, descriptions)
 - [ ] "trapcode" → "trapscript" (file references, imports)
 - [ ] `tc.` → `ts.` (all code examples)
-- [ ] `import TrapCode as tc` → `import TrapScript as ts`
-- [ ] `TrapCode.py` → `TrapScript.py` (file references)
+- [ ] `import trapcode as tc` → `import trapscript as ts`
+- [ ] `trapcode.py` → `trapscript.py` (file references)
 - [ ] `[TrapCode]` → `[TrapScript]` (log output examples)
 
 Key sections to review:
@@ -72,12 +72,26 @@ Key sections to review:
 - Debug logging section
 - Any URLs or references
 
-### 3.2 Update Planning/Research Docs (Optional)
+### 3.2 Update `.gitignore`
+- [ ] Update comment: `# Strudel experiments (not part of TrapCode)` → `TrapScript`
 
-These are internal docs, lower priority:
-- [ ] `scope/plan/*.md` - Update if referencing tc/trapcode
-- [ ] `scope/research docs/*.md` - Update if referencing tc/trapcode
-- [ ] `scope/helper docs.md` - Update if referencing tc/trapcode
+### 3.3 Update `scope/todo.md`
+- [ ] Update all `tc.` references → `ts.`
+
+### 3.4 Update Planning/Research Docs
+
+Files with references to update:
+- [ ] `scope/plan/debugging_system.md` - Multiple `tc.` and `[TrapCode]` refs
+- [ ] `scope/plan/voice_triggering_questions.md`
+- [ ] `scope/plan/voice_triggering.md`
+- [ ] `scope/plan/strudel_mini_notation.md`
+- [ ] `scope/plan/pattern state access/pattern_state_acces.md`
+- [ ] `scope/plan/phase1/phase1.3_chord_symbols.md`
+- [ ] `scope/plan/phase1/finished/phase1_tier1_implementation.md`
+- [ ] `scope/plan/phase1/finished/phase1.2_note_representations.md`
+- [ ] `scope/plan/archive/voice_triggering_questions.md`
+- [ ] `scope/research docs/studel/Python Implementation of Strudle's Mini-Notation.md`
+- [ ] `scope/research docs/archive/strudel_supercollider_research.md`
 
 ---
 
@@ -90,8 +104,9 @@ These are internal docs, lower priority:
 
 ### 4.2 Update `.cursor/skills/update/SKILL.md`
 - [ ] Update title: "Update TrapCode" → "Update TrapScript"
-- [ ] Update description
+- [ ] Update description in frontmatter
 - [ ] Update command: `cp trapcode.py` → `cp trapscript.py`
+- [ ] Add cleanup step for old `trapcode.py` in FL Studio Lib folder
 - [ ] Update all references
 
 ### 4.3 Update `.cursor/commands/*.md` (if any reference trapcode)
@@ -99,19 +114,13 @@ These are internal docs, lower priority:
 
 ---
 
-## Phase 5: Git/Repository (Post-Rename)
+## Phase 5: Git/Repository
 
-### 5.1 Rename Repository
-- [ ] Rename local folder: `TrapCode/` → `TrapScript/`
-- [ ] Rename GitHub repo (Settings → General → Repository name)
-- [ ] Update local remote URL: `git remote set-url origin <new-url>`
-- [ ] Update any external references (if published)
+### 5.1 Commit Strategy
 
-### 5.2 Commit Strategy
-Option A: Single atomic commit
-Option B: Staged commits (library → docs → config)
+**Recommended: Single atomic commit**
 
-Recommended: Single atomic commit with message:
+Commit message:
 ```
 Rename TrapCode to TrapScript
 
@@ -120,6 +129,27 @@ Rename TrapCode to TrapScript
 - tc → ts import alias
 - Updated all documentation, examples, and cursor config
 ```
+
+### 5.2 Push and Rename GitHub Repository
+
+**Order of operations (important):**
+1. Complete all file renames and content updates
+2. Commit changes locally
+3. Push to current `TrapCode` repo on GitHub
+4. Rename repo on GitHub: Settings → General → Repository name → `TrapScript`
+5. Update local remote URL:
+   ```bash
+   git remote set-url origin https://github.com/J-Broadway/TrapScript.git
+   ```
+6. (Optional) Rename local folder: `TrapCode/` → `TrapScript/`
+
+**Notes:**
+- GitHub automatically redirects old URLs to new repo name
+- Local folder name doesn't need to match repo name (git works regardless)
+
+### 5.3 FL Studio Cleanup
+- [ ] After first deploy of `trapscript.py`, remove old `trapcode.py` from:
+  `/Applications/FL Studio 2025.app/Contents/Resources/FL/Shared/Python/Lib/`
 
 ---
 
@@ -132,6 +162,9 @@ After rename, verify:
 - [ ] README renders correctly with new naming
 - [ ] Cursor rules load properly
 - [ ] /update skill deploys `trapscript.py` to FL Studio
+- [ ] Old `trapcode.py` removed from FL Studio Lib folder
+- [ ] GitHub repo accessible at new URL
+- [ ] Old GitHub URL redirects correctly
 
 ---
 
@@ -144,8 +177,16 @@ After rename, verify:
 | `scope/scope.py` | Import + all `tc.` refs |
 | `scope/test.py` | Import + all `tc.` refs |
 | `README.md` | ~200+ replacements |
+| `.gitignore` | Comment update |
+| `scope/todo.md` | `tc.` refs |
+| `scope/plan/debugging_system.md` | `tc.` and `[TrapCode]` refs |
+| `scope/plan/voice_triggering*.md` | `tc.` refs |
+| `scope/plan/strudel_mini_notation.md` | `tc.` refs |
+| `scope/plan/pattern state access/*.md` | `tc.` refs |
+| `scope/plan/phase1/*.md` | `tc.` refs |
+| `scope/research docs/**/*.md` | `tc.` refs |
 | `.cursor/rules/trapcode-workflow.mdc` → `trapscript-workflow.mdc` | Rename + content |
-| `.cursor/skills/update/SKILL.md` | Content updates |
+| `.cursor/skills/update/SKILL.md` | Content + cleanup step |
 
 ---
 
