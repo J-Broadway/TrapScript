@@ -6,7 +6,7 @@ tc.debug(True, level=1)
 
 def createDialog():
     ui = tc.UI()
-    ui.Knob(name='Cycle', d=1, min=0.5, max=4, export='bind')
+    ui.Knob(name='Cycle', d=2, min=0.5, max=4, export='bind')
     return ui.form
 
 def onTriggerVoice(incomingVoice):
@@ -17,11 +17,11 @@ def onTriggerVoice(incomingVoice):
     
     # --- Test 1: Basic bus registration ---
     # Register pattern to 'melody' bus, access state in onTick
-    chain = midi.n("<[c4,e4,g4] [d4,f#4,a4] [e4,g#4,b4]>", c=tc.par.Cycle, bus='melody')
+    #chain = midi.n("<[c4,e4,g4] [d4,f#4,a4] [e4,g#4,b4]>", c=tc.par.Cycle, bus='melody')
     
     # --- Test 2: Ghost pattern (mute=True) ---
     # Pattern ticks but produces no sound, state only
-    # midi.n("<0 1 2 3>", c=1, mute=True, bus='melody')
+    midi.n("[0 2 <<5!2 6!4 6!2>!2 <4!2 5!4 5!2>!2 >]*2", c=tc.par.Cycle, mute=False, bus='melody')
     
     # --- Test 3: Multiple voices on same bus ---
     # Play two different notes, both register to 'melody'
