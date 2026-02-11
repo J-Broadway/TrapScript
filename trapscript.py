@@ -143,13 +143,117 @@ class EdgeMixin:
         return did_change
 
 # -----------------------------
+# Registry pattern
+# -----------------------------
+class _Registry:
+    """A dict-like container that prints nicely and supports .add()"""
+    
+    def __init__(self, name, data):
+        self._name = name
+        self._data = data
+    
+    def __repr__(self):
+        """When you type `ts.scales` in REPL, show the contents."""
+        items = ', '.join(sorted(self._data.keys()))
+        return f"<{self._name}: {items}>"
+    
+    def __getitem__(self, key):
+        """Allow ts.scales['major'] access."""
+        return self._data.get(key.lower())
+    
+    def __contains__(self, key):
+        """Allow 'major' in ts.scales."""
+        return key.lower() in self._data
+    
+    def __iter__(self):
+        """Allow for scale in ts.scales."""
+        return iter(self._data.keys())
+    
+    def add(self, name, value):
+        """Add a custom entry."""
+        self._data[name.lower()] = value
+    
+    def list(self):
+        """Return list of all names."""
+        return list(self._data.keys())
+    
+    def get(self, key, default=None):
+        """Dict-like get with default."""
+        return self._data.get(key.lower(), default)
+
+# -----------------------------
+# Scales registry
+# -----------------------------
+scales = _Registry('scales', {
+    # Modal (7-note)
+    'major':      [0, 2, 4, 5, 7, 9, 11],   # Ionian
+    'minor':      [0, 2, 3, 5, 7, 8, 10],   # Natural minor / Aeolian
+    'dorian':     [0, 2, 3, 5, 7, 9, 10],
+    'phrygian':   [0, 1, 3, 5, 7, 8, 10],
+    'lydian':     [0, 2, 4, 6, 7, 9, 11],
+    'mixolydian': [0, 2, 4, 5, 7, 9, 10],
+    'locrian':    [0, 1, 3, 5, 6, 8, 10],
+    
+    # Pentatonic
+    'pentatonic':       [0, 2, 4, 7, 9],
+    'minor_pentatonic': [0, 3, 5, 7, 10],
+    
+    # Blues
+    'blues': [0, 3, 5, 6, 7, 10],
+    
+    # Harmonic/Melodic
+    'harmonic_minor': [0, 2, 3, 5, 7, 8, 11],
+    'melodic_minor':  [0, 2, 3, 5, 7, 9, 11],
+    
+    # Diminished (8-note octatonic)
+    'diminished':    [0, 2, 3, 5, 6, 8, 9, 11],   # Whole-half
+    'diminished_hw': [0, 1, 3, 4, 6, 7, 9, 10],    # Half-whole
+    
+    # Chromatic (all 12 notes)
+    'chromatic': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+})
+
+# -----------------------------
+# Notes registry
+# -----------------------------
+notes = _Registry('notes', {
+    'c': 0, 'c#': 1, 'db': 1,
+    'd': 2, 'd#': 3, 'eb': 3,
+    'e': 4, 'fb': 4, 'e#': 5,
+    'f': 5, 'f#': 6, 'gb': 6,
+    'g': 7, 'g#': 8, 'ab': 8,
+    'a': 9, 'a#': 10, 'bb': 10,
+    'b': 11, 'cb': 11, 'b#': 0,
+})
+
+# -----------------------------
+# Chords registry (basic, for Phase 1.4)
+# -----------------------------
+chords = _Registry('chords', {
+    '':     [0, 4, 7],           # Major triad
+    'm':    [0, 3, 7],           # Minor triad
+    'dim':  [0, 3, 6],           # Diminished
+    'aug':  [0, 4, 8],           # Augmented
+    '7':    [0, 4, 7, 10],       # Dominant 7
+    'maj7': [0, 4, 7, 11],       # Major 7
+    'm7':   [0, 3, 7, 10],       # Minor 7
+    'dim7': [0, 3, 6, 9],        # Diminished 7
+})
+
+# -----------------------------
 # MIDI voice helper
 # -----------------------------
 class MIDI(vfx.Voice):
     parentVoice = None
-    def __init__(self, incomingVoice):
+    def __init__(self, incomingVoice, c=4, scale=None):
         super().__init__(incomingVoice)
         self.parentVoice = incomingVoice
+        self._c = c                    # Default cycle beats
+        self._scale = None             # Scale intervals (e.g., [0,2,3,5,7,8,10])
+        self._scale_root = None        # Scale root as MIDI note (e.g., 72 for C5)
+        
+        if scale:
+            self._scale, self._scale_root = _parse_scale(scale)
 
 # -----------------------------
 # Public parameter namespace
@@ -1155,6 +1259,87 @@ def _is_note(value: str) -> bool:
 
 
 # -----------------------------
+# Scale parsing & resolution
+# -----------------------------
+def _parse_scale(scale_str):
+    """
+    Parse scale string into (intervals, root_midi).
+    
+    Examples:
+        "c:major"    -> ([0,2,4,5,7,9,11], 48)   # C3 default
+        "c5:major"   -> ([0,2,4,5,7,9,11], 72)   # C5
+        "a4:minor"   -> ([0,2,3,5,7,8,10], 69)   # A4
+        "f#5:blues"  -> ([0,3,5,6,7,10], 78)      # F#5
+    """
+    parts = scale_str.lower().split(':')
+    if len(parts) != 2:
+        raise ValueError(f"Invalid scale format: {scale_str}. Use 'root:scale' (e.g., 'c5:major')")
+    
+    root_str, scale_name = parts
+    
+    intervals = scales.get(scale_name)
+    if intervals is None:
+        raise ValueError(f"Unknown scale: {scale_name}. Available: {scales.list()}")
+    
+    root_midi = _note_to_midi(root_str, default_octave=3)
+    
+    return intervals, root_midi
+
+
+def _scale_degree_to_midi(degree, scale_intervals, scale_root):
+    """
+    Convert a scale degree index (0-indexed) to MIDI note.
+    
+    Args:
+        degree: Scale degree index (0 = root, 1 = 2nd note, etc.)
+                Negative values go below root. Values >= len(scale) wrap octaves.
+        scale_intervals: List of semitone offsets [0, 2, 4, 5, 7, 9, 11]
+        scale_root: MIDI note of scale root (e.g., 72 for C5)
+    
+    Returns:
+        MIDI note number
+    
+    Examples (C major scale, root=60):
+        degree=0  -> 60 (C4)
+        degree=2  -> 64 (E4)
+        degree=7  -> 72 (C5) - wraps to next octave
+        degree=-1 -> 59 (B3) - below root
+    """
+    num_degrees = len(scale_intervals)
+    
+    # Handle octave wrapping
+    octave_offset = degree // num_degrees
+    degree_in_scale = degree % num_degrees
+    
+    semitone_offset = scale_intervals[degree_in_scale]
+    return scale_root + semitone_offset + (octave_offset * 12)
+
+
+def _quantize_to_scale(midi_note, scale_intervals, scale_root):
+    """
+    Quantize a MIDI note to the nearest note in the scale.
+    """
+    # Build scale notes across octaves
+    all_scale_notes = []
+    for octave in range(-1, 10):
+        for interval in scale_intervals:
+            note = scale_root + interval + (octave * 12)
+            if 0 <= note <= 127:
+                all_scale_notes.append(note)
+    
+    # Find nearest
+    best_note = scale_root
+    best_diff = float('inf')
+    for scale_note in all_scale_notes:
+        diff = abs(scale_note - midi_note)
+        if diff < best_diff:
+            best_note = scale_note
+            best_diff = diff
+    
+    return best_note
+
+
+# -----------------------------
 # Tokenizer
 # -----------------------------
 class Token(NamedTuple):
@@ -1215,6 +1400,8 @@ class PatternChain:
         self._prev_state = {}             # For change detection
         self._root = 60                   # Root note for offset calculation
         self._cycle_beats = 4             # Cycle duration in beats
+        self._scale = None                # Scale intervals (e.g., [0,2,3,5,7,8,10])
+        self._scale_root = None           # Scale root as MIDI note
         
         # Bus registration info
         self._bus_name = None
@@ -1319,6 +1506,10 @@ class PatternChain:
         self._state['phase'] = phase_float - int(phase_float)  # Fractional part [0.0, 1.0)
         self._state['cycle'] = int(phase_float)
         
+        # Debug: log events
+        if events and _debug_enabled:
+            _log("chain", f"tick={current_tick} cycle={int(phase_float)} events={len(events)} values={[e.value for e in events]}", level=1)
+        
         # Process events
         if events:
             self._state['onset'] = True
@@ -1330,10 +1521,16 @@ class PatternChain:
             for e in events:
                 if isinstance(e.value, AbsoluteNote):
                     n_values.append(e.value.midi)
-                    notes.append(e.value.midi)
+                    if self._scale is not None:
+                        notes.append(_quantize_to_scale(e.value.midi, self._scale, self._scale_root))
+                    else:
+                        notes.append(e.value.midi)
                 elif isinstance(e.value, (int, float)):
                     n_values.append(e.value)
-                    notes.append(int(self._root + e.value))
+                    if self._scale is not None:
+                        notes.append(_scale_degree_to_midi(int(e.value), self._scale, self._scale_root))
+                    else:
+                        notes.append(int(self._root + e.value))
                 else:
                     continue  # Skip rests or unknown values
                 
@@ -1391,6 +1588,9 @@ class PatternChain:
         """Fire MIDI notes for current state. Skipped when mute=True."""
         notes = self._state['notes']
         durations = self._state.get('_durations', [])
+        
+        if _debug_enabled:
+            _log("chain", f"FIRE notes={notes} durations={[round(d, 3) for d in durations]}", level=1)
         
         for i, midi_note in enumerate(notes):
             # Use per-note duration from event's whole span, or fallback
@@ -2079,7 +2279,8 @@ class _MiniParser:
         """
         elements = []  # List of (pattern, weight) tuples
         while self.peek() and self.peek().type not in ('RBRACK', 'RANGLE', 'COMMA'):
-            elements.append(self.parse_element())
+            # parse_element returns a list (usually 1 item, more if !n expansion)
+            elements.extend(self.parse_element(expand_replication=False))
         
         if not elements:
             return Pattern.silence()
@@ -2095,13 +2296,21 @@ class _MiniParser:
                 return elements[0][0]
             return _sequence(*[p for p, _ in elements])
     
-    def parse_element(self) -> Tuple[Pattern, int]:
+    def parse_element(self, expand_replication=False) -> List[Tuple[Pattern, int]]:
         """
-        Parse an atom with optional modifiers, return (pattern, weight).
+        Parse an atom with optional modifiers, return list of (pattern, weight) tuples.
+        
+        Args:
+            expand_replication: If True (used by slowcat), !n expands to n copies.
+                               If False (regular sequences), !n uses repeatCycles.fast.
+        
         element ::= atom (modifier)*
+        
+        Returns a list because !n can expand to multiple elements when expand_replication=True.
         """
         pat = self.parse_atom()
         weight = 1  # Default weight
+        replication = 1  # For expand_replication mode
         
         # Consume modifiers
         while self.peek() and self.peek().type in ('STAR', 'SLASH', 'AT', 'BANG', 'QUESTION'):
@@ -2128,19 +2337,29 @@ class _MiniParser:
                     # @n weight must be int
                     weight = int(float(num_tok.value))
                 elif tok.type == 'BANG':
-                    # !n replication: repeat each cycle n times, then speed up
-                    # This matches Strudel's behavior: pat._repeatCycles(n)._fast(n)
-                    # ALSO sets weight so replicated element takes proportional time
-                    # Example: "a!3 b" -> a takes 3/4 time, b takes 1/4
+                    # !n replication
                     num = int(float(num_tok.value))
                     if num > 0:
-                        pat = pat.repeatCycles(num).fast(num)
-                        weight = num  # Replicated elements take proportional time
+                        if expand_replication:
+                            # Slowcat mode: expand to n copies of the element
+                            # <0!2 3 5 7> becomes <0 0 3 5 7>
+                            replication = num
+                        else:
+                            # Regular sequence mode: repeat cycles and speed up
+                            # [0!2 3 5 7] plays 0 twice in its time slot
+                            pat = pat.repeatCycles(num).fast(num)
+                            weight = num
                     else:
                         pat = Pattern.silence()
                         weight = 0
+                        replication = 0
         
-        return (pat, weight)
+        # Return list of (pattern, weight) tuples
+        if replication <= 1:
+            return [(pat, weight)]
+        else:
+            # Expand to n copies (for slowcat)
+            return [(pat, weight) for _ in range(replication)]
     
     def parse_atom(self) -> Pattern:
         """
@@ -2181,41 +2400,41 @@ class _MiniParser:
             # Unlike [a b c] which subdivides within a cycle, <a b c> plays
             # a on cycle 0, b on cycle 1, c on cycle 2, then repeats
             #
-            # Implementation: parse contents as weighted sequence, then slow
-            # by total weight. This matches Strudel's polymeter_slowcat behavior.
+            # Implementation: parse contents, expand !n replications inline,
+            # then slow by element count. This matches Strudel's behavior.
             # 
-            # Example: <a!2 b> → sequence with total weight 3, slowed by 3
-            #   - Cycle 0: first 1/3 of sequence (a at 2x speed in 2/3 slot)
-            #   - Cycle 1: middle 1/3 of sequence (rest of a)
-            #   - Cycle 2: last 1/3 of sequence (b in 1/3 slot)
+            # Example: <0!2 3 5 7> → expands to <0 0 3 5 7> (5 elements)
+            #   - Cycle 0: 0
+            #   - Cycle 1: 0
+            #   - Cycle 2: 3
+            #   - Cycle 3: 5
+            #   - Cycle 4: 7
+            #   - Cycle 5: 0 (loops)
             self.consume('LANGLE')
             
-            # Parse contents as weighted sequence (same as parse_layer)
+            # Parse contents with !n expansion (expand_replication=True)
             elements = []  # List of (pattern, weight) tuples
             while self.peek() and self.peek().type not in ('RANGLE', 'COMMA'):
-                elements.append(self.parse_element())
+                elements.extend(self.parse_element(expand_replication=True))
             
             self.consume('RANGLE')
             
             if not elements:
                 return Pattern.silence()
             
-            # Calculate total weight
-            total_weight = sum(w for _, w in elements)
+            # For slowcat, each element takes one cycle (weight is typically 1 after expansion)
+            # Use element count as the slow factor
+            num_elements = len(elements)
             
-            # Build the sequence (weighted if needed)
-            has_weights = any(w != 1 for _, w in elements)
-            if has_weights:
-                inner = _weighted_sequence(elements)
+            # Build sequence from patterns (weights are typically all 1 after !n expansion)
+            if num_elements == 1:
+                inner = elements[0][0]
             else:
-                if len(elements) == 1:
-                    inner = elements[0][0]
-                else:
-                    inner = _sequence(*[p for p, _ in elements])
+                inner = _sequence(*[p for p, _ in elements])
             
-            # Slow by total weight so it spans that many cycles
-            if total_weight > 1:
-                return inner.slow(total_weight)
+            # Slow by element count so each element spans one full cycle
+            if num_elements > 1:
+                return inner.slow(num_elements)
             return inner
         
         else:
@@ -2380,14 +2599,15 @@ def _resolve_dynamic(value):
     return value
 
 
-def _midi_n(self, pattern_str: str, c=4, mute=False, bus_name=None) -> 'PatternChain':
+def _midi_n(self, pattern_str: str, c=None, scale=None, mute=False, bus_name=None) -> 'PatternChain':
     """
     Create a pattern from mini-notation, using this voice's note as root.
     
     Args:
         pattern_str: Mini-notation string (e.g., "0 3 5 7")
-        c: Cycle duration in beats (default 4 = one bar).
-           Can be a static value OR a UI wrapper (e.g., tc.par.MyKnob) for dynamic updates.
+        c: Cycle duration in beats. Inherits from MIDI instance if None.
+           Can be a static value OR a UI wrapper (e.g., ts.par.MyKnob) for dynamic updates.
+        scale: Scale string (e.g., "c5:major"). Inherits from MIDI instance if None.
         mute: If True, pattern is ghost/silent (state-only, no audio). Default False.
         bus_name: Optional bus name for cross-scope state access.
     
@@ -2396,20 +2616,39 @@ def _midi_n(self, pattern_str: str, c=4, mute=False, bus_name=None) -> 'PatternC
     
     Example:
         def onTriggerVoice(incomingVoice):
-            midi = tc.MIDI(incomingVoice)
-            midi.n("0 3 5 7", c=4)  # Static: 4 beats per cycle
-            midi.n("0 3 5 7", c=tc.par.MyKnob)  # Dynamic: follows knob value
-            midi.n("<0 1 2 3>", c=1, mute=True, bus='clock')  # Ghost clock pattern
+            midi = ts.MIDI(incomingVoice, c=4, scale="c5:major")
+            midi.n("0 2 4 6")              # Inherits c=4, scale=c5:major -> Cmaj7
+            midi.n("0 2 4", c=2)           # c overridden to 2
+            midi.n("0 2 4", scale="a4:minor")  # Scale overridden
     """
+    # Inherit from MIDI instance if not overridden
+    cycle_beats = c if c is not None else self._c
+    
+    # Parse scale if provided at .n() level, else inherit from MIDI
+    if scale is not None:
+        active_scale, active_scale_root = _parse_scale(scale)
+    else:
+        active_scale = self._scale
+        active_scale_root = self._scale_root
+    
     # Create PatternChain with mute setting
     chain = PatternChain(midi_wrapper=self, mute=mute)
     
     # Parse and set up the pattern
     pat = _parse_mini(pattern_str)
     chain._pattern = pat
-    chain._root = self.note  # Use incoming MIDI note as root
-    chain._cycle_beats = c
+    chain._cycle_beats = cycle_beats
     chain._parent_voice = self.parentVoice
+    
+    # Store scale info on chain for note resolution
+    chain._scale = active_scale
+    chain._scale_root = active_scale_root
+    
+    # Determine pattern root
+    if active_scale is not None:
+        chain._root = active_scale_root  # Scale mode: root is scale root
+    else:
+        chain._root = self.note  # Chromatic mode: root is incoming voice note
     
     # Expose parent voice in state
     chain._state['parentVoice'] = self.parentVoice
@@ -2429,15 +2668,19 @@ def _midi_n(self, pattern_str: str, c=4, mute=False, bus_name=None) -> 'PatternC
     pat.start(_get_current_tick())
     
     # Register chain for update loop (tied to parentVoice)
-    _register_chain(self.parentVoice, chain, c, self.note)
+    _register_chain(self.parentVoice, chain, cycle_beats, chain._root)
+    
+    if _debug_enabled:
+        scale_info = f"scale={scale or (self._scale is not None and 'inherited')}" if (active_scale is not None) else "chromatic"
+        _log("midi.n", f"pattern='{pattern_str}' c={cycle_beats} root={chain._root} {scale_info}", level=1)
     
     return chain
 
 
 # Attach method to MIDI class (use 'bus' as parameter name in public API)
-def _midi_n_wrapper(self, pattern_str: str, c=4, mute=False, bus=None) -> 'PatternChain':
+def _midi_n_wrapper(self, pattern_str: str, c=None, scale=None, mute=False, bus=None) -> 'PatternChain':
     """Wrapper to allow 'bus' as keyword arg (avoiding shadowing global bus())."""
-    return _midi_n(self, pattern_str, c=c, mute=mute, bus_name=bus)
+    return _midi_n(self, pattern_str, c=c, scale=scale, mute=mute, bus_name=bus)
 
 MIDI.n = _midi_n_wrapper
 
@@ -2484,12 +2727,22 @@ def _update_midi_patterns():
         for e in events:
             _log("patterns", f"EVENT value={e.value} whole=({float(e.whole[0]):.4f}, {float(e.whole[1]):.4f}) part=({float(e.part[0]):.4f}, {float(e.part[1]):.4f}) has_onset={e.has_onset()}", level=2)
         
+        # Get scale info from MIDI wrapper (if available)
+        _mw_scale = getattr(midi_wrapper, '_scale', None)
+        _mw_scale_root = getattr(midi_wrapper, '_scale_root', None)
+        
         for e in events:
-            # Resolve note value: AbsoluteNote is absolute, numbers are relative to root
+            # Resolve note value: scale-aware resolution
             if isinstance(e.value, AbsoluteNote):
-                note_val = e.value.midi  # Absolute MIDI from note name
+                if _mw_scale is not None:
+                    note_val = _quantize_to_scale(e.value.midi, _mw_scale, _mw_scale_root)
+                else:
+                    note_val = e.value.midi  # Absolute MIDI from note name
             elif isinstance(e.value, (int, float)):
-                note_val = root + e.value  # Relative offset from root
+                if _mw_scale is not None:
+                    note_val = _scale_degree_to_midi(int(e.value), _mw_scale, _mw_scale_root)
+                else:
+                    note_val = root + e.value  # Relative offset from root
             else:
                 note_val = None  # Rest or unknown
             

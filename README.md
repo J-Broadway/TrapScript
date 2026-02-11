@@ -48,7 +48,12 @@ def onTick():
 ## Features
 
 ### 1. MIDI Voice Helper
-Simplifies voice modification by subclassing `vfx.Voice` and preserving the parent voice.
+Simplifies voice modification by subclassing `vfx.Voice` and preserving the parent voice. Supports default cycle and scale parameters.
+
+**Parameters**:
+- `incomingVoice`: The MIDI voice to wrap
+- `c`: Default cycle beats for `.n()` patterns (default 4)
+- `scale`: Default scale string for `.n()` patterns (default None = chromatic mode)
 
 **Code Example**:
 ```python
@@ -56,6 +61,110 @@ def onTriggerVoice(incomingVoice):
     midi = ts.MIDI(incomingVoice)
     midi.trigger()  # Trigger the modified voice
 ```
+
+**With Defaults**:
+```python
+def onTriggerVoice(incomingVoice):
+    midi = ts.MIDI(incomingVoice, c=2, scale="c5:major")
+    midi.n("0 2 4")  # Inherits c=2, plays C5 E5 G5 (major triad)
+```
+
+### 1b. Scale System
+When a `scale` is set on `ts.MIDI`, pattern numbers become **scale degree indices** instead of semitone offsets.
+
+**Two Modes**:
+
+| Mode | Numbers Represent | Root Note |
+|------|------------------|-----------|
+| Chromatic (no scale) | Semitone offsets from incoming MIDI | Incoming voice note |
+| Scale mode | 0-indexed scale degree indices | Scale root |
+
+**Scale String Format**: `"<root>[octave]:<scale_name>"`
+```python
+"c:major"     # C3 major (default octave 3)
+"c5:major"    # C5 major
+"a4:minor"    # A4 natural minor
+"f#5:blues"   # F#5 blues scale
+"bb3:dorian"  # Bb3 dorian mode
+```
+
+**Scale Degree Examples** (C major = C D E F G A B):
+```python
+midi = ts.MIDI(v, scale="c5:major")
+midi.n("0 1 2")    # C5, D5, E5 (degrees 1, 2, 3)
+midi.n("0 2 4")    # C5, E5, G5 (degrees 1, 3, 5 = major triad)
+midi.n("0 2 4 6")  # C5, E5, G5, B5 (maj7 chord)
+```
+
+**Octave Wrapping**: Degrees beyond scale length wrap to next octave:
+```python
+midi = ts.MIDI(v, scale="c4:major")  # 7-note scale
+midi.n("7 8 9")  # C5, D5, E5 (next octave)
+```
+
+**Negative Degrees**: Go below the root:
+```python
+midi = ts.MIDI(v, scale="c5:major")
+midi.n("-1 0 1")  # B4, C5, D5
+```
+
+**Note Names with Scale**: Absolute note names are **quantized** to the nearest scale note:
+```python
+midi = ts.MIDI(v, scale="c5:minor")
+midi.n("c4 e4 g4")  # C4, Eb4, G4 (e4 snaps to eb4 in C minor)
+```
+
+**Override at `.n()` Level**:
+```python
+midi = ts.MIDI(v, c=4, scale="c5:major")
+midi.n("0 2 4")                    # Inherits c=4, C major
+midi.n("0 2 4", c=2)               # c overridden to 2
+midi.n("0 2 4", scale="a4:minor")  # Scale overridden to A minor
+```
+
+### 1c. Registries (scales, notes, chords)
+Dict-like containers for scale intervals, note-to-chroma mappings, and chord intervals. Inspectable and extensible.
+
+**Usage**:
+```python
+# Inspect available entries
+ts.scales        # <scales: major, minor, dorian, ...>
+ts.notes         # <notes: c, c#, d, ...>
+ts.chords        # <chords: , m, 7, m7, maj7, ...>
+
+# Access values
+ts.scales['major']       # [0, 2, 4, 5, 7, 9, 11]
+ts.notes['c#']           # 1
+ts.chords['m7']          # [0, 3, 7, 10]
+
+# Check existence
+'dorian' in ts.scales    # True
+'bebop' in ts.scales     # False
+
+# List all
+ts.scales.list()         # ['major', 'minor', 'dorian', ...]
+
+# Add custom
+ts.scales.add('bebop', [0, 2, 4, 5, 7, 9, 10, 11])
+midi = ts.MIDI(v, scale="c4:bebop")  # Now works
+```
+
+**Built-in Scales**:
+| Name | Intervals |
+|------|-----------|
+| major | [0, 2, 4, 5, 7, 9, 11] |
+| minor | [0, 2, 3, 5, 7, 8, 10] |
+| dorian | [0, 2, 3, 5, 7, 9, 10] |
+| phrygian | [0, 1, 3, 5, 7, 8, 10] |
+| lydian | [0, 2, 4, 6, 7, 9, 11] |
+| mixolydian | [0, 2, 4, 5, 7, 9, 10] |
+| locrian | [0, 1, 3, 5, 6, 8, 10] |
+| pentatonic | [0, 2, 4, 7, 9] |
+| minor_pentatonic | [0, 3, 5, 7, 10] |
+| blues | [0, 3, 5, 6, 7, 10] |
+| harmonic_minor | [0, 2, 3, 5, 7, 8, 11] |
+| melodic_minor | [0, 2, 3, 5, 7, 9, 11] |
+| chromatic | [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] |
 
 ### 2. Helpers
 Utility functions for clamping, normalization, and warnings.
@@ -650,6 +759,20 @@ def onTick():
 ```
 
 The pattern uses the incoming MIDI note as root and stops when the parent voice releases.
+
+**With Scales**: Use `scale` to switch from semitone offsets to scale degree indices:
+```python
+def onTriggerVoice(incomingVoice):
+    # Chromatic mode: 0 3 5 7 = semitone offsets from incoming note
+    midi = ts.MIDI(incomingVoice)
+    midi.n("0 3 5 7", c=4)
+    
+    # Scale mode: 0 2 4 6 = degrees 1, 3, 5, 7 of C major (Cmaj7)
+    midi = ts.MIDI(incomingVoice, scale="c5:major")
+    midi.n("0 2 4 6", c=4)  # C5, E5, G5, B5
+```
+
+See Section 1b for full scale system documentation.
 
 #### Nested Patterns
 ```python
