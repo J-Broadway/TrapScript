@@ -1339,6 +1339,42 @@ def _quantize_to_scale(midi_note, scale_intervals, scale_root):
     return best_note
 
 
+def _midi_to_scale_degree(midi_note, scale_intervals, scale_root):
+    """
+    Find the scale degree index for a MIDI note (or nearest if not in scale).
+    
+    Args:
+        midi_note: The MIDI note to find (e.g., 64 for E4)
+        scale_intervals: List of semitone offsets [0, 2, 4, 5, 7, 9, 11]
+        scale_root: MIDI note of scale root (e.g., 60 for C4)
+    
+    Returns:
+        Scale degree index (0-indexed, can be negative or >= len(scale))
+    
+    Example (C major, root=60):
+        midi=60 (C4) -> 0
+        midi=64 (E4) -> 2  
+        midi=72 (C5) -> 7
+        midi=59 (B3) -> -1
+    """
+    # First quantize to ensure we're on a scale tone
+    quantized = _quantize_to_scale(midi_note, scale_intervals, scale_root)
+    
+    # Calculate offset from root
+    semitone_offset = quantized - scale_root
+    octave_offset = semitone_offset // 12
+    semitone_in_octave = semitone_offset % 12
+    
+    # Find which degree this semitone corresponds to
+    num_degrees = len(scale_intervals)
+    for i, interval in enumerate(scale_intervals):
+        if interval == semitone_in_octave:
+            return octave_offset * num_degrees + i
+    
+    # Fallback (shouldn't happen if quantize worked)
+    return 0
+
+
 # -----------------------------
 # Tokenizer
 # -----------------------------
@@ -1399,6 +1435,7 @@ class PatternChain:
         self._updaters = []               # List of update functions
         self._prev_state = {}             # For change detection
         self._root = 60                   # Root note for offset calculation
+        self._base_degree = 0             # Scale degree offset (incoming voice's position in scale)
         self._cycle_beats = 4             # Cycle duration in beats
         self._scale = None                # Scale intervals (e.g., [0,2,3,5,7,8,10])
         self._scale_root = None           # Scale root as MIDI note
@@ -1528,7 +1565,8 @@ class PatternChain:
                 elif isinstance(e.value, (int, float)):
                     n_values.append(e.value)
                     if self._scale is not None:
-                        notes.append(_scale_degree_to_midi(int(e.value), self._scale, self._scale_root))
+                        absolute_degree = self._base_degree + int(e.value)
+                        notes.append(_scale_degree_to_midi(absolute_degree, self._scale, self._scale_root))
                     else:
                         notes.append(int(self._root + e.value))
                 else:
@@ -2646,7 +2684,10 @@ def _midi_n(self, pattern_str: str, c=None, scale=None, mute=False, bus_name=Non
     
     # Determine pattern root
     if active_scale is not None:
-        chain._root = active_scale_root  # Scale mode: root is scale root
+        # Snap incoming voice to nearest scale tone; degree 0 = snapped note
+        snapped_note = _quantize_to_scale(self.note, active_scale, active_scale_root)
+        chain._root = snapped_note
+        chain._base_degree = _midi_to_scale_degree(self.note, active_scale, active_scale_root)
     else:
         chain._root = self.note  # Chromatic mode: root is incoming voice note
     
@@ -2740,7 +2781,9 @@ def _update_midi_patterns():
                     note_val = e.value.midi  # Absolute MIDI from note name
             elif isinstance(e.value, (int, float)):
                 if _mw_scale is not None:
-                    note_val = _scale_degree_to_midi(int(e.value), _mw_scale, _mw_scale_root)
+                    _base_deg = getattr(midi_wrapper, '_base_degree', 0)
+                    absolute_degree = _base_deg + int(e.value)
+                    note_val = _scale_degree_to_midi(absolute_degree, _mw_scale, _mw_scale_root)
                 else:
                     note_val = root + e.value  # Relative offset from root
             else:
