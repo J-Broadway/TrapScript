@@ -1,20 +1,25 @@
 ---
 name: update
-description: Deploy trapcode.py to FL Studio's Python Lib folder. Use when the user says /update or asks to deploy/copy trapcode to FL Studio.
+description: Deploy trapscript.py to FL Studio's Python Lib folder. Use when the user says /update or asks to deploy/copy trapscript to FL Studio.
 ---
 
-# Update TrapCode
+# Update TrapScript
 
-Deploy `trapcode.py` to FL Studio's Python Lib folder.
+Deploy `trapscript.py` to FL Studio's Python Lib folder.
 
 ## Command
 
-Run this command to copy trapcode.py:
+Run this command to copy trapscript.py:
 
 ```bash
-cp trapcode.py "/Applications/FL Studio 2025.app/Contents/Resources/FL/Shared/Python/Lib/"
+cp trapscript.py "/Applications/FL Studio 2025.app/Contents/Resources/FL/Shared/Python/Lib/"
 ```
 
 ## After Deployment
-- Make sure README.md is updated (for trapcode.py)
+- Make sure README.md is updated (for trapscript.py)
 - Remind the user to recompile their script in VFX Script (click Compile) to load the updated library.
+- If this is the first deploy after the rename, also remove the old trapcode.py:
+
+```bash
+rm "/Applications/FL Studio 2025.app/Contents/Resources/FL/Shared/Python/Lib/trapcode.py"
+```

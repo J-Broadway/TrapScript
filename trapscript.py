@@ -17,7 +17,7 @@ def _warn_clamp(name, value, lo, hi):
     if value < lo or value > hi:
         caller = inspect.stack()[2] if len(inspect.stack()) >= 3 else None
         where = f" (line {caller.lineno})" if caller else ""
-        print(f"[TrapCode]{where} '{name}' value {value} outside [{lo}, {hi}] -> clamped")
+        print(f"[TrapScript]{where} '{name}' value {value} outside [{lo}, {hi}] -> clamped")
 
 # -----------------------------
 # Debug System
@@ -38,7 +38,7 @@ def _log(category: str, msg: str, level: int = 1):
         return
     if level > _debug_level:
         return
-    print(f"[TrapCode:{category}] {msg}")
+    print(f"[TrapScript:{category}] {msg}")
 
 def debug(enable=None, *, level=None):
     """
@@ -91,7 +91,7 @@ class PulseMixin:
                 try:
                     on_click()
                 except Exception as e:
-                    print(f"[TrapCode] pulse on_click error: {e}")
+                    print(f"[TrapScript] pulse on_click error: {e}")
             return True
         return False
 
@@ -139,7 +139,7 @@ class EdgeMixin:
                 try:
                     callback(current, prev)
                 except Exception as e:
-                    print(f"[TrapCode] changed callback error: {e}")
+                    print(f"[TrapScript] changed callback error: {e}")
         return did_change
 
 # -----------------------------
@@ -804,7 +804,7 @@ def _check_update_reminder():
     """Show one-time reminder if update() hasn't been called yet."""
     global _reminder_shown
     if not _update_called and not _reminder_shown:
-        print("[TrapCode] Reminder: Call tc.update() in onTick() for triggers to fire")
+        print("[TrapScript] Reminder: Call tc.update() in onTick() for triggers to fire")
         _reminder_shown = True
 
 
@@ -903,7 +903,20 @@ class Fraction:
                 n, d = numerator.split('/')
                 numerator, denominator = int(n), int(d)
             else:
-                numerator = int(float(numerator))
+                # Handle decimal strings like "0.5" -> Fraction(1, 2)
+                f = float(numerator)
+                if f != int(f):
+                    # Convert decimal to fraction: find power of 10 needed
+                    s = numerator.rstrip('0')  # Remove trailing zeros
+                    if '.' in s:
+                        decimal_places = len(s) - s.index('.') - 1
+                        scale = 10 ** decimal_places
+                        numerator = int(round(f * scale))
+                        denominator = scale
+                    else:
+                        numerator = int(f)
+                else:
+                    numerator = int(f)
         n, d = int(numerator), int(denominator)
         if d == 0:
             raise ZeroDivisionError("Fraction denominator cannot be zero")
@@ -1015,6 +1028,20 @@ class Event:
 
 
 # -----------------------------
+# AbsoluteNote Marker
+# -----------------------------
+@dataclass(frozen=True)
+class AbsoluteNote:
+    """
+    Marker for absolute MIDI values (from note names).
+    
+    Distinguishes note names (e.g., 'c4' -> AbsoluteNote(60)) from
+    numeric offsets (e.g., '0' -> int) at trigger time.
+    """
+    midi: int
+
+
+# -----------------------------
 # Time Conversion
 # -----------------------------
 def _ticks_to_time(ticks: int, ppq: int, cycle_beats: int) -> Time:
@@ -1036,6 +1063,98 @@ def _tick_arc(tick: int, ppq: int, cycle_beats: int) -> Arc:
 
 
 # -----------------------------
+# Note Name Parsing
+# -----------------------------
+
+# Chroma values for each note letter (C = 0)
+_CHROMAS = {'c': 0, 'd': 2, 'e': 4, 'f': 5, 'g': 7, 'a': 9, 'b': 11}
+
+# Accidental semitone offsets (# and s = sharp, b and f = flat)
+_ACCIDENTALS = {'#': 1, 'b': -1, 's': 1, 'f': -1}
+
+
+def _tokenize_note(note: str) -> tuple:
+    """
+    Parse note string into (letter, accidentals, octave).
+    
+    Returns:
+        (letter: str, accidentals: str, octave: int or None)
+    
+    Examples:
+        'c4' -> ('c', '', 4)
+        'eb5' -> ('e', 'b', 5)
+        'f##3' -> ('f', '##', 3)
+        'c' -> ('c', '', None)
+    """
+    if not note or not isinstance(note, str):
+        return (None, '', None)
+    
+    # Match: letter + accidentals + optional octave
+    match = re.match(r'^([a-gA-G])([#bsf]*)(-?\d*)$', note)
+    if not match:
+        return (None, '', None)
+    
+    letter = match.group(1).lower()
+    accidentals = match.group(2)
+    octave_str = match.group(3)
+    octave = int(octave_str) if octave_str else None
+    
+    return (letter, accidentals, octave)
+
+
+def _get_accidental_offset(accidentals: str) -> int:
+    """Sum of semitone offsets for accidentals string."""
+    return sum(_ACCIDENTALS.get(c, 0) for c in accidentals)
+
+
+def _note_to_midi(note: str, default_octave: int = 3) -> int:
+    """
+    Convert note name to MIDI number.
+    
+    Args:
+        note: Note string like 'c4', 'eb5', 'f##'
+        default_octave: Octave to use if not specified (default 3)
+    
+    Returns:
+        MIDI note number (0-127)
+    
+    Examples:
+        'c4' -> 60
+        'c#4' -> 61
+        'db4' -> 61
+        'c5' -> 72
+        'c' -> 48 (octave 3 default)
+    
+    Raises:
+        ValueError if note format is invalid
+    """
+    letter, accidentals, octave = _tokenize_note(note)
+    
+    if letter is None:
+        raise ValueError(f"Invalid note format: '{note}'")
+    
+    if octave is None:
+        octave = default_octave
+    
+    chroma = _CHROMAS[letter]
+    offset = _get_accidental_offset(accidentals)
+    
+    # MIDI formula: (octave + 1) * 12 + chroma + offset
+    midi = (octave + 1) * 12 + chroma + offset
+    
+    # Clamp to valid MIDI range
+    return _clamp(midi, 0, 127)
+
+
+def _is_note(value: str) -> bool:
+    """Check if string is a valid note name."""
+    if not isinstance(value, str):
+        return False
+    letter, _, _ = _tokenize_note(value)
+    return letter is not None
+
+
+# -----------------------------
 # Tokenizer
 # -----------------------------
 class Token(NamedTuple):
@@ -1046,6 +1165,7 @@ class Token(NamedTuple):
 
 _TOKEN_SPEC = [
     ('NUMBER',  r'-?\d+(\.\d+)?'),  # Negative or positive, optional decimal
+    ('NOTE',    r'[a-gA-G][#bsf]*-?\d*'),  # Note name: c, c#, eb4, f##5
     ('REST',    r'[~\-]'),          # ~ or standalone - (only matches if NUMBER didn't)
     ('LBRACK',  r'\['),
     ('RBRACK',  r'\]'),
@@ -1053,6 +1173,10 @@ _TOKEN_SPEC = [
     ('RANGLE',  r'>'),
     ('STAR',    r'\*'),
     ('SLASH',   r'/'),
+    ('AT',      r'@'),              # Weighting
+    ('BANG',    r'!'),              # Replicate
+    ('QUESTION', r'\?'),            # Degrade
+    ('COMMA',   r','),              # Polyphony
     ('WS',      r'\s+'),
 ]
 
@@ -1066,6 +1190,409 @@ def _tokenize(code: str) -> Iterator[Token]:
         kind = mo.lastgroup
         if kind not in _IGNORE:
             yield Token(kind, mo.group(), mo.start())
+
+
+# -----------------------------
+# Bus System (Pattern State Access)
+# -----------------------------
+import time as _time
+
+class PatternChain:
+    """
+    Universal container for pattern-based operations with state exposure.
+    
+    Wraps pattern operations, maintains state dictionary, and provides
+    change detection for cross-scope access via the bus system.
+    """
+    
+    def __init__(self, midi_wrapper=None, mute=False):
+        self._midi = midi_wrapper
+        self._mute = mute
+        self._running = True
+        self._pattern = None              # The underlying Pattern object
+        self._patterns = {}               # method_name -> Pattern (for chained modifiers)
+        self._updaters = []               # List of update functions
+        self._prev_state = {}             # For change detection
+        self._root = 60                   # Root note for offset calculation
+        self._cycle_beats = 4             # Cycle duration in beats
+        
+        # Bus registration info
+        self._bus_name = None
+        self._bus_voice_id = None
+        
+        # Parent voice tracking (for lifecycle management)
+        self._parent_voice = None
+        
+        # Base state dictionary
+        self._state = {
+            'notes': [],
+            'n': [],
+            'step': 0,
+            'phase': 0.0,
+            'cycle': 0,
+            'onset': False,
+            'mute': mute,
+            'parentVoice': None,    # Parent voice (incoming MIDI voice)
+            'note': 60.0,
+            'finePitch': 0.0,
+            'velocity': 0.8,
+            'pan': 0.0,
+            'length': 0,
+            'output': 0,
+            'fcut': 0.0,
+            'fres': 0.0,
+        }
+    
+    def _register(self, keys: dict, updater=None):
+        """Register state keys and optional per-tick updater."""
+        self._state.update(keys)
+        if updater:
+            self._updaters.append(updater)
+    
+    # --- Dunder methods for Pythonic access ---
+    
+    def __getitem__(self, key: str):
+        """Direct key access: chain['n'] instead of chain.dict()['n']."""
+        return self._state.get(key)
+    
+    def __contains__(self, key: str) -> bool:
+        """Membership test: 'n' in chain."""
+        return key in self._state
+    
+    def __bool__(self) -> bool:
+        """Truthy if onset occurred this tick."""
+        return self._state.get('onset', False)
+    
+    def __repr__(self) -> str:
+        """Useful debug output."""
+        notes = self._state.get('notes', [])
+        step = self._state.get('step', 0)
+        return f"<PatternChain step={step} notes={notes}>"
+    
+    # --- State access methods ---
+    
+    def dict(self) -> dict:
+        """Return snapshot of current state."""
+        return self._state.copy()
+    
+    def changed(self, key: str = None) -> bool:
+        """
+        Detect state changes.
+        
+        Args:
+            key: Specific key to check, or None for onset detection
+        
+        Returns:
+            True if change occurred this tick
+        """
+        if key is None:
+            return self._state.get('onset', False)
+        
+        current = self._state.get(key)
+        previous = self._prev_state.get(key)
+        return current != previous
+    
+    def tick(self, current_tick: int, ppq: int, cycle_beats: float):
+        """
+        Update state for this tick. Called by tc.update().
+        
+        Args:
+            current_tick: Current tick count
+            ppq: Pulses per quarter note
+            cycle_beats: Beats per cycle
+        """
+        if not self._running or self._pattern is None:
+            return
+        
+        # Store previous state for change detection
+        self._prev_state = self._state.copy()
+        
+        # Reset onset flag
+        self._state['onset'] = False
+        
+        # Get events from underlying pattern
+        events = self._pattern.tick(current_tick, ppq, cycle_beats)
+        
+        # Update phase/cycle/step from pattern's internal state
+        phase = self._pattern._phase
+        phase_float = float(phase)
+        self._state['phase'] = phase_float - int(phase_float)  # Fractional part [0.0, 1.0)
+        self._state['cycle'] = int(phase_float)
+        
+        # Process events
+        if events:
+            self._state['onset'] = True
+            
+            # Collect values and durations from events
+            n_values = []
+            notes = []
+            durations = []
+            for e in events:
+                if isinstance(e.value, AbsoluteNote):
+                    n_values.append(e.value.midi)
+                    notes.append(e.value.midi)
+                elif isinstance(e.value, (int, float)):
+                    n_values.append(e.value)
+                    notes.append(int(self._root + e.value))
+                else:
+                    continue  # Skip rests or unknown values
+                
+                # Calculate duration from event's whole span (same as _update_midi_patterns)
+                if e.whole:
+                    duration_time = e.whole[1] - e.whole[0]
+                    duration_beats = float(duration_time) * cycle_beats
+                else:
+                    duration_beats = 0.1  # Short default for continuous patterns
+                durations.append(max(0.01, duration_beats))
+            
+            self._state['n'] = n_values
+            self._state['notes'] = notes
+            self._state['_durations'] = durations  # Internal: per-note durations
+            
+            # Calculate step from pattern position
+            # Using the first event's whole span to determine step
+            if events[0].whole:
+                whole_start = float(events[0].whole[0])
+                step_frac = whole_start - int(whole_start)  # Fractional part [0.0, 1.0)
+                # Count unique onset positions (not total events, which includes stacked notes)
+                unique_onsets = len(set(float(e.whole[0]) for e in events if e.whole))
+                # Estimate steps per cycle from events with different onset times
+                self._state['step'] = int(step_frac * max(1, unique_onsets))
+        
+        # Run all registered updaters (for chained modifiers like .v(), .pan())
+        for updater in self._updaters:
+            updater(current_tick, ppq, cycle_beats)
+        
+        # Fire notes if not muted and onset occurred
+        if not self._mute and self._state['onset']:
+            self._fire_notes()
+    
+    def _get_steps_per_cycle(self) -> int:
+        """
+        Estimate number of unique onset positions per cycle.
+        
+        For chords like [c4,e4,g4], multiple notes share the same onset,
+        so we count unique onset times rather than total events.
+        """
+        try:
+            events = self._pattern.query((Fraction(0), Fraction(1)))
+            if not events:
+                return 1
+            # Count unique onset positions (whole[0] values)
+            unique_onsets = set()
+            for e in events:
+                if e.whole:
+                    unique_onsets.add(float(e.whole[0]))
+            return max(len(unique_onsets), 1)
+        except:
+            return 1
+    
+    def _fire_notes(self):
+        """Fire MIDI notes for current state. Skipped when mute=True."""
+        notes = self._state['notes']
+        durations = self._state.get('_durations', [])
+        
+        for i, midi_note in enumerate(notes):
+            # Use per-note duration from event's whole span, or fallback
+            if i < len(durations):
+                duration_beats = durations[i]
+            else:
+                # Fallback: estimate from cycle_beats (shouldn't happen normally)
+                duration_beats = max(0.01, self._cycle_beats / 4)
+            
+            # Allow explicit length override from state
+            if self._state['length']:
+                duration_beats = self._state['length']
+            
+            note_obj = Note(
+                m=int(midi_note),
+                l=duration_beats,
+                v=int(self._state['velocity'] * 127),
+                p=self._state['pan'],
+            )
+            
+            # Get parent voice for triggering
+            parent = None
+            if self._midi and hasattr(self._midi, 'parentVoice'):
+                parent = self._midi.parentVoice
+            elif self._parent_voice:
+                parent = self._parent_voice
+            
+            if parent:
+                note_obj.trigger(cut=False, parent=parent)
+    
+    # --- Lifecycle ---
+    
+    def stop(self):
+        """
+        Stop the pattern and remove from bus.
+        
+        For standalone patterns (tc.n without parent), this is required
+        for cleanup. Voice-scoped patterns are cleaned up automatically.
+        """
+        self._running = False
+        
+        # Stop the underlying pattern
+        if self._pattern:
+            self._pattern.stop()
+        
+        # Remove from bus if registered
+        if self._bus_name and self._bus_voice_id:
+            bus_reg = bus(self._bus_name)
+            if self._bus_voice_id in bus_reg:
+                dict.__delitem__(bus_reg, self._bus_voice_id)
+        
+        # Remove from chain registry
+        _unregister_chain(self)
+
+
+class BusRegistry(dict):
+    """
+    Dict-like container for PatternChains keyed by voice ID.
+    
+    Provides iteration, index access, and history tracking for released voices.
+    """
+    
+    def __init__(self):
+        super().__init__()
+        self._history = []            # List of (release_tick, [chains]) tuples
+        self.history_limit = 10       # Max batches to keep
+        self._voice_counter = 0       # For unique IDs
+        self.name = ''                # Set when registered via tc.bus()
+    
+    # --- Dunder methods for Pythonic access ---
+    
+    def __iter__(self):
+        """Iterate PatternChains directly (not voice IDs)."""
+        return iter(self.values())
+    
+    def __getitem__(self, key):
+        """Access by index (int) or voice_id (tuple)."""
+        if isinstance(key, int):
+            # tc.bus('clock')[0] — get by index
+            values = list(self.values())
+            if not values or key >= len(values) or key < -len(values):
+                raise IndexError(f"Bus index {key} out of range")
+            return values[key]
+        return super().__getitem__(key)  # voice_id tuple access
+    
+    def __bool__(self):
+        """Truthy if has active voices."""
+        return len(self) > 0
+    
+    def __repr__(self):
+        """Useful debug output."""
+        return f"<BusRegistry '{self.name}': {len(self)} voices>"
+    
+    # --- Core methods ---
+    
+    def _generate_id(self) -> tuple:
+        """Generate unique voice ID: (timestamp, counter)."""
+        self._voice_counter += 1
+        return (_time.time(), self._voice_counter)
+    
+    def register(self, chain: 'PatternChain') -> tuple:
+        """Add chain to registry, return voice ID."""
+        voice_id = self._generate_id()
+        dict.__setitem__(self, voice_id, chain)  # Use dict method to avoid override issues
+        return voice_id
+    
+    def release(self, voice_id: tuple, release_tick: int):
+        """Move chain to history on voice release."""
+        if voice_id not in self:
+            return
+        
+        chain = self.pop(voice_id)
+        
+        # Group by release tick
+        if self._history and self._history[0][0] == release_tick:
+            self._history[0][1].append(chain)
+        else:
+            self._history.insert(0, (release_tick, [chain]))
+        
+        # Trim history
+        while len(self._history) > self.history_limit:
+            self._history.pop()
+    
+    def newest(self) -> 'PatternChain | None':
+        """Get most recently triggered chain."""
+        if not self:
+            return None
+        return dict.__getitem__(self, max(self.keys()))
+    
+    def oldest(self) -> 'PatternChain | None':
+        """Get earliest triggered chain."""
+        if not self:
+            return None
+        return dict.__getitem__(self, min(self.keys()))
+    
+    def last(self, n: int = 0) -> list:
+        """Get chains from nth-most-recent release batch."""
+        if n >= len(self._history):
+            return []
+        return self._history[n][1]
+    
+    def history(self) -> list:
+        """Get all release batches (newest first)."""
+        return [batch[1] for batch in self._history]
+
+
+class BusContainer(dict):
+    """Dict-like container for all buses. Accessed via tc.buses."""
+    pass
+
+
+# Module-level bus storage
+_buses = BusContainer()
+
+# Public API: direct access to all buses
+buses = _buses
+
+
+def bus(name: str) -> BusRegistry:
+    """
+    Get or create bus registry by name. Auto-creates if missing.
+    
+    Args:
+        name: Bus name (e.g., 'melody', 'clock')
+    
+    Returns:
+        BusRegistry for the given name
+    """
+    if name not in _buses:
+        _buses[name] = BusRegistry()
+        _buses[name].name = name
+    return _buses[name]
+
+
+# Chain registry: tracks all active PatternChains for update loop
+# Maps: id(chain) -> (chain, cycle_beats, root, parent_voice_id)
+_chain_registry = {}
+
+# Voice-to-chains mapping for cleanup
+# Maps: id(parent_voice) -> [(bus_name, bus_voice_id, chain_id), ...]
+_voice_chain_map = {}
+
+
+def _register_chain(parent_voice, chain: PatternChain, cycle_beats, root: int):
+    """Register a PatternChain for the update loop."""
+    chain_id = id(chain)
+    parent_id = id(parent_voice) if parent_voice else None
+    
+    _chain_registry[chain_id] = (chain, cycle_beats, root, parent_id)
+    
+    # Track for voice cleanup
+    if parent_id:
+        if parent_id not in _voice_chain_map:
+            _voice_chain_map[parent_id] = []
+        _voice_chain_map[parent_id].append((chain._bus_name, chain._bus_voice_id, chain_id))
+
+
+def _unregister_chain(chain: PatternChain):
+    """Remove a PatternChain from the update loop."""
+    chain_id = id(chain)
+    if chain_id in _chain_registry:
+        del _chain_registry[chain_id]
 
 
 # -----------------------------
@@ -1154,6 +1681,79 @@ class Pattern:
         """
         return self.fast(Fraction(1) / Fraction(factor))
     
+    def repeatCycles(self, n) -> 'Pattern':
+        """
+        Repeat each cycle of the pattern n times.
+        
+        Unlike fast(), this doesn't compress time within each cycle.
+        Instead, it repeats the entire cycle content n times before
+        moving to the next cycle of the source pattern.
+        
+        For example, with a slowcat pattern <a b>:
+        - repeatCycles(2) gives: a a b b a a b b ...
+        - fast(2) gives: a b a b a b ... (twice as fast)
+        
+        This is used by the replicate (!) operator.
+        """
+        n = int(n)
+        if n <= 0:
+            return Pattern.silence()
+        if n == 1:
+            return self
+        
+        outer_self = self
+        
+        def query(arc: Arc) -> List[Event]:
+            # Get the current cycle number
+            cycle = int(arc[0])
+            # Calculate which source cycle this maps to
+            source_cycle = cycle // n
+            # Calculate the offset within the repetition group
+            delta = Fraction(cycle - source_cycle * n)
+            
+            # Shift the query back to the source cycle
+            shifted_arc = (arc[0] - delta, arc[1] - delta)
+            
+            # Query the source pattern
+            events = outer_self.query(shifted_arc)
+            
+            # Shift the results forward to the current cycle
+            result = []
+            for e in events:
+                new_whole = None
+                if e.whole:
+                    new_whole = (e.whole[0] + delta, e.whole[1] + delta)
+                new_part = (e.part[0] + delta, e.part[1] + delta)
+                result.append(Event(e.value, new_whole, new_part))
+            
+            return result
+        
+        return Pattern(query)
+    
+    def degrade(self, probability: float = 0.5) -> 'Pattern':
+        """
+        Randomly drop events with given probability of keeping them.
+        
+        Args:
+            probability: Chance of keeping the event (0.0 to 1.0)
+        
+        Uses true randomness for natural variation. Each event is independently
+        evaluated with the given probability.
+        """
+        import random
+        outer_self = self
+        
+        def query(arc: Arc) -> List[Event]:
+            events = outer_self.query(arc)
+            result = []
+            for e in events:
+                # Use true randomness for natural musical variation
+                if random.random() < probability:
+                    result.append(e)
+            return result
+        
+        return Pattern(query)
+    
     # --- Playback control ---
     def start(self, current_tick: int = None):
         """Start the pattern. Optionally provide current tick, else uses 0."""
@@ -1203,6 +1803,11 @@ class Pattern:
         cycle_beats = float(cycle_beats)
         if cycle_beats < 0.01:
             cycle_beats = 0.01
+        
+        # Snap to nearest integer if very close (fixes float precision from UI knobs)
+        rounded = round(cycle_beats)
+        if abs(cycle_beats - rounded) < 0.001:
+            cycle_beats = float(rounded)
         
         # Handle first tick: latch initial cycle_beats
         if self._last_tick is None:
@@ -1334,6 +1939,99 @@ def _slowcat(*patterns) -> Pattern:
     return Pattern(query)
 
 
+def _stack(*patterns) -> Pattern:
+    """
+    Layer patterns for simultaneous playback (polyphony).
+    
+    All patterns are queried with the same arc, results merged.
+    "a, b" plays both a and b at the same time.
+    """
+    if not patterns:
+        return Pattern.silence()
+    if len(patterns) == 1:
+        return patterns[0]
+    
+    def query(arc: Arc) -> List[Event]:
+        results = []
+        for pat in patterns:
+            results.extend(pat.query(arc))
+        return results
+    
+    return Pattern(query)
+
+
+def _weighted_sequence(elements: List[Tuple[Pattern, int]]) -> Pattern:
+    """
+    Like _sequence(), but with weighted time allocation.
+    
+    Args:
+        elements: List of (pattern, weight) tuples
+    
+    Example:
+        "a@2 b" gives a 2/3 of the time, b 1/3
+        "a b@3 c" gives a=1/5, b=3/5, c=1/5
+    """
+    if not elements:
+        return Pattern.silence()
+    
+    total_weight = sum(w for _, w in elements)
+    if total_weight == 0:
+        return Pattern.silence()
+    
+    # Pre-calculate cumulative positions
+    positions = []
+    cumulative = Fraction(0)
+    for pat, weight in elements:
+        start = cumulative
+        end = cumulative + Fraction(weight, total_weight)
+        positions.append((pat, start, end))
+        cumulative = end
+    
+    def query(arc: Arc) -> List[Event]:
+        results = []
+        cycle_start = int(arc[0])
+        cycle_end = int(arc[1]) if arc[1] == int(arc[1]) else int(arc[1]) + 1
+        
+        for pat, child_start, child_end in positions:
+            child_duration = child_end - child_start
+            if child_duration == 0:
+                continue  # Skip zero-weight elements
+            
+            for c in range(cycle_start, cycle_end):
+                # This child's absolute time slot in cycle c
+                slot_start = Fraction(c) + child_start
+                slot_end = Fraction(c) + child_end
+                
+                # Intersect with query arc
+                query_start = max(arc[0], slot_start)
+                query_end = min(arc[1], slot_end)
+                
+                if query_start < query_end:
+                    # Transform to child's local time (0-1 within its slot)
+                    # Inverse of the slot mapping
+                    scale = Fraction(1) / child_duration
+                    local_start = (query_start - slot_start) * scale + Fraction(c)
+                    local_end = (query_end - slot_start) * scale + Fraction(c)
+                    
+                    child_events = pat.query((local_start, local_end))
+                    
+                    # Transform results back to parent time
+                    for e in child_events:
+                        new_whole = None
+                        if e.whole:
+                            w_start = slot_start + (e.whole[0] - Fraction(c)) * child_duration
+                            w_end = slot_start + (e.whole[1] - Fraction(c)) * child_duration
+                            new_whole = (w_start, w_end)
+                        p_start = slot_start + (e.part[0] - Fraction(c)) * child_duration
+                        p_end = slot_start + (e.part[1] - Fraction(c)) * child_duration
+                        new_part = (p_start, p_end)
+                        results.append(Event(e.value, new_whole, new_part))
+        
+        return results
+    
+    return Pattern(query)
+
+
 # -----------------------------
 # Mini-Notation Parser
 # -----------------------------
@@ -1359,50 +2057,95 @@ class _MiniParser:
         return tok
     
     def parse(self) -> Pattern:
-        """Parse the full pattern."""
-        return self.parse_layer()
+        """
+        Parse the full pattern.
+        pattern ::= layer (',' layer)*
+        """
+        layers = [self.parse_layer()]
+        
+        while self.peek() and self.peek().type == 'COMMA':
+            self.consume('COMMA')
+            layers.append(self.parse_layer())
+        
+        if len(layers) == 1:
+            return layers[0]
+        
+        return _stack(*layers)
     
     def parse_layer(self) -> Pattern:
         """
-        Parse a sequence of elements.
+        Parse a sequence of weighted elements.
         layer ::= element+
         """
-        elements = []
-        while self.peek() and self.peek().type not in ('RBRACK', 'RANGLE'):
+        elements = []  # List of (pattern, weight) tuples
+        while self.peek() and self.peek().type not in ('RBRACK', 'RANGLE', 'COMMA'):
             elements.append(self.parse_element())
         
         if not elements:
             return Pattern.silence()
-        if len(elements) == 1:
-            return elements[0]
         
-        return _sequence(*elements)
+        # Check if any element has non-default weight
+        has_weights = any(w != 1 for _, w in elements)
+        
+        if has_weights:
+            return _weighted_sequence(elements)
+        else:
+            # Use original sequence for efficiency (extract patterns from tuples)
+            if len(elements) == 1:
+                return elements[0][0]
+            return _sequence(*[p for p, _ in elements])
     
-    def parse_element(self) -> Pattern:
+    def parse_element(self) -> Tuple[Pattern, int]:
         """
-        Parse an atom with optional modifiers.
+        Parse an atom with optional modifiers, return (pattern, weight).
         element ::= atom (modifier)*
         """
         pat = self.parse_atom()
+        weight = 1  # Default weight
         
         # Consume modifiers
-        while self.peek() and self.peek().type in ('STAR', 'SLASH'):
+        while self.peek() and self.peek().type in ('STAR', 'SLASH', 'AT', 'BANG', 'QUESTION'):
             tok = self.consume()
-            # Next token must be a number
-            num_tok = self.consume('NUMBER')
-            num = Fraction(num_tok.value)
             
-            if tok.type == 'STAR':
-                pat = pat.fast(num)
-            elif tok.type == 'SLASH':
-                pat = pat.slow(num)
+            if tok.type == 'QUESTION':
+                # ? has optional probability argument
+                if self.peek() and self.peek().type == 'NUMBER':
+                    prob = float(self.consume().value)
+                else:
+                    prob = 0.5  # Default probability
+                pat = pat.degrade(prob)
+            else:
+                # STAR, SLASH, AT, BANG all require a number
+                num_tok = self.consume('NUMBER')
+                
+                if tok.type == 'STAR':
+                    # *n accepts float for fractional speed
+                    pat = pat.fast(Fraction(num_tok.value))
+                elif tok.type == 'SLASH':
+                    # /n accepts float for fractional slow
+                    pat = pat.slow(Fraction(num_tok.value))
+                elif tok.type == 'AT':
+                    # @n weight must be int
+                    weight = int(float(num_tok.value))
+                elif tok.type == 'BANG':
+                    # !n replication: repeat each cycle n times, then speed up
+                    # This matches Strudel's behavior: pat._repeatCycles(n)._fast(n)
+                    # ALSO sets weight so replicated element takes proportional time
+                    # Example: "a!3 b" -> a takes 3/4 time, b takes 1/4
+                    num = int(float(num_tok.value))
+                    if num > 0:
+                        pat = pat.repeatCycles(num).fast(num)
+                        weight = num  # Replicated elements take proportional time
+                    else:
+                        pat = Pattern.silence()
+                        weight = 0
         
-        return pat
+        return (pat, weight)
     
     def parse_atom(self) -> Pattern:
         """
         Parse a primitive value or grouped pattern.
-        atom ::= NUMBER | REST | '[' pattern ']' | '<' pattern+ '>'
+        atom ::= NUMBER | NOTE | REST | '[' pattern ']' | '<' pattern+ '>'
         """
         tok = self.peek()
         if tok is None:
@@ -1416,28 +2159,64 @@ class _MiniParser:
             else:
                 return Pattern.pure(int(tok.value))
         
+        elif tok.type == 'NOTE':
+            self.consume()
+            # Convert note name to MIDI, wrap in AbsoluteNote marker
+            midi = _note_to_midi(tok.value)
+            return Pattern.pure(AbsoluteNote(midi))
+        
         elif tok.type == 'REST':
             self.consume()
             return Pattern.pure(None)  # Rest
         
         elif tok.type == 'LBRACK':
-            # Subdivision: [a b c]
+            # Subdivision: [a b c] (allow commas for polyphony inside)
             self.consume('LBRACK')
-            inner = self.parse_layer()
+            inner = self.parse()
             self.consume('RBRACK')
             return inner
         
         elif tok.type == 'LANGLE':
-            # Alternation: <a b c>
+            # Slowcat notation: <a b c> — distributes elements across cycles
+            # Unlike [a b c] which subdivides within a cycle, <a b c> plays
+            # a on cycle 0, b on cycle 1, c on cycle 2, then repeats
+            #
+            # Implementation: parse contents as weighted sequence, then slow
+            # by total weight. This matches Strudel's polymeter_slowcat behavior.
+            # 
+            # Example: <a!2 b> → sequence with total weight 3, slowed by 3
+            #   - Cycle 0: first 1/3 of sequence (a at 2x speed in 2/3 slot)
+            #   - Cycle 1: middle 1/3 of sequence (rest of a)
+            #   - Cycle 2: last 1/3 of sequence (b in 1/3 slot)
             self.consume('LANGLE')
-            alternatives = []
-            while self.peek() and self.peek().type != 'RANGLE':
-                alternatives.append(self.parse_element())
+            
+            # Parse contents as weighted sequence (same as parse_layer)
+            elements = []  # List of (pattern, weight) tuples
+            while self.peek() and self.peek().type not in ('RANGLE', 'COMMA'):
+                elements.append(self.parse_element())
+            
             self.consume('RANGLE')
             
-            if not alternatives:
+            if not elements:
                 return Pattern.silence()
-            return _slowcat(*alternatives)
+            
+            # Calculate total weight
+            total_weight = sum(w for _, w in elements)
+            
+            # Build the sequence (weighted if needed)
+            has_weights = any(w != 1 for _, w in elements)
+            if has_weights:
+                inner = _weighted_sequence(elements)
+            else:
+                if len(elements) == 1:
+                    inner = elements[0][0]
+                else:
+                    inner = _sequence(*[p for p, _ in elements])
+            
+            # Slow by total weight so it spans that many cycles
+            if total_weight > 1:
+                return inner.slow(total_weight)
+            return inner
         
         else:
             # Unknown token, skip
@@ -1486,8 +2265,14 @@ def _update_patterns():
         active_cycle_beats = pattern._latched_cycle_beats or cycle_beats
         
         for e in events:
-            # Create and trigger note
-            note_val = root + e.value if e.value is not None else None
+            # Resolve note value: AbsoluteNote is absolute, numbers are relative to root
+            if isinstance(e.value, AbsoluteNote):
+                note_val = e.value.midi  # Absolute MIDI from note name
+            elif isinstance(e.value, (int, float)):
+                note_val = root + e.value  # Relative offset from root
+            else:
+                note_val = None  # Rest or unknown
+            
             if note_val is not None:
                 # Calculate duration from event's whole span (use latched value)
                 if e.whole:
@@ -1506,9 +2291,9 @@ def _update_patterns():
 # -----------------------------
 # Public API: tc.n() / tc.note()
 # -----------------------------
-def note(pattern_str: str, c = 4, root = 60) -> Pattern:
+def note(pattern_str: str, c=4, root=60, parent=None, mute=False, bus_name=None) -> 'PatternChain':
     """
-    Create a pattern from mini-notation.
+    Create a standalone pattern from mini-notation.
     
     Args:
         pattern_str: Mini-notation string (e.g., "0 3 5 7")
@@ -1516,25 +2301,67 @@ def note(pattern_str: str, c = 4, root = 60) -> Pattern:
            Can be a static value OR a UI wrapper for dynamic updates.
         root: Root note (default 60 = C4). Values in pattern are offsets from root.
               Can be a static value OR a UI wrapper for dynamic updates.
+        parent: Optional parent voice (ties pattern to voice lifecycle).
+                If provided, pattern is cleaned up via stop_patterns_for_voice().
+                If None, pattern persists until .stop() is called.
+        mute: If True, pattern is ghost/silent (state-only, no audio). Default False.
+        bus_name: Optional bus name for cross-scope state access.
     
     Returns:
-        Pattern object. Call .start() to begin playback.
+        PatternChain object (auto-started)
     
     Example:
-        pattern = tc.n("0 3 5 7", c=4, root=60)  # Static values
-        pattern = tc.n("0 3 5 7", c=tc.par.CycleKnob, root=tc.par.RootKnob)  # Dynamic
-        pattern.start()
+        # Tied to voice lifecycle
+        def onTriggerVoice(v):
+            tc.n("<0 3 5>", c=4, parent=v, bus='melody')
         
+        # Persistent (manual cleanup required)
+        _clock = None
         def onTick():
+            global _clock
+            if _clock is None:
+                _clock = tc.n("<0 1 2 3>", c=1, mute=True, bus='clock')
             tc.update()
+        
+        # Manual cleanup
+        _clock.stop()
     """
+    # Create PatternChain (no MIDI wrapper for standalone patterns)
+    chain = PatternChain(midi_wrapper=None, mute=mute)
+    
+    # Parse and set up the pattern
     pat = _parse_mini(pattern_str)
-    _active_patterns.append((pat, root, c))
-    return pat
+    chain._pattern = pat
+    chain._root = root
+    chain._cycle_beats = c
+    chain._parent_voice = parent
+    
+    # Expose parent voice in state (if provided)
+    chain._state['parentVoice'] = parent
+    
+    # Register to bus if name provided
+    if bus_name:
+        voice_id = bus(bus_name).register(chain)
+        chain._bus_name = bus_name
+        chain._bus_voice_id = voice_id
+    
+    # Auto-start the underlying pattern
+    pat.start(_get_current_tick())
+    
+    # Register chain for update loop
+    _register_chain(parent, chain, c, root)
+    
+    return chain
 
 
-# Alias
-n = note
+def n(pattern_str: str, c=4, root=60, parent=None, mute=False, bus=None) -> 'PatternChain':
+    """
+    Create a standalone pattern from mini-notation.
+    
+    Alias for tc.note() with 'bus' as keyword arg name.
+    See tc.note() for full documentation.
+    """
+    return note(pattern_str, c=c, root=root, parent=parent, mute=mute, bus_name=bus)
 
 
 # -----------------------------
@@ -1553,7 +2380,7 @@ def _resolve_dynamic(value):
     return value
 
 
-def _midi_n(self, pattern_str: str, c = 4) -> Pattern:
+def _midi_n(self, pattern_str: str, c=4, mute=False, bus_name=None) -> 'PatternChain':
     """
     Create a pattern from mini-notation, using this voice's note as root.
     
@@ -1561,33 +2388,58 @@ def _midi_n(self, pattern_str: str, c = 4) -> Pattern:
         pattern_str: Mini-notation string (e.g., "0 3 5 7")
         c: Cycle duration in beats (default 4 = one bar).
            Can be a static value OR a UI wrapper (e.g., tc.par.MyKnob) for dynamic updates.
+        mute: If True, pattern is ghost/silent (state-only, no audio). Default False.
+        bus_name: Optional bus name for cross-scope state access.
     
     Returns:
-        Pattern object (auto-started, tied to this voice's lifecycle)
+        PatternChain object (auto-started, tied to this voice's lifecycle)
     
     Example:
         def onTriggerVoice(incomingVoice):
             midi = tc.MIDI(incomingVoice)
             midi.n("0 3 5 7", c=4)  # Static: 4 beats per cycle
             midi.n("0 3 5 7", c=tc.par.MyKnob)  # Dynamic: follows knob value
+            midi.n("<0 1 2 3>", c=1, mute=True, bus='clock')  # Ghost clock pattern
     """
+    # Create PatternChain with mute setting
+    chain = PatternChain(midi_wrapper=self, mute=mute)
+    
+    # Parse and set up the pattern
     pat = _parse_mini(pattern_str)
-    root = self.note  # Use incoming MIDI note as root
+    chain._pattern = pat
+    chain._root = self.note  # Use incoming MIDI note as root
+    chain._cycle_beats = c
+    chain._parent_voice = self.parentVoice
     
-    # Register pattern with this MIDI wrapper (self is the triggered voice)
-    # Store c as-is (may be int, float, wrapper, or callable) for dynamic resolution
-    voice_id = id(self.parentVoice)
-    _midi_patterns[voice_id] = (pat, c, root, self)
+    # Expose parent voice in state
+    chain._state['parentVoice'] = self.parentVoice
     
-    # Auto-start with internal tick counter
-    # Pattern starts at current tick; update() processes patterns before incrementing
+    # Initialize bus registration tracking on MIDI wrapper if needed
+    if not hasattr(self, '_bus_registrations'):
+        self._bus_registrations = []
+    
+    # Register to bus if name provided
+    if bus_name:
+        voice_id = bus(bus_name).register(chain)
+        chain._bus_name = bus_name
+        chain._bus_voice_id = voice_id
+        self._bus_registrations.append((bus_name, voice_id))
+    
+    # Auto-start the underlying pattern
     pat.start(_get_current_tick())
     
-    return pat
+    # Register chain for update loop (tied to parentVoice)
+    _register_chain(self.parentVoice, chain, c, self.note)
+    
+    return chain
 
 
-# Attach method to MIDI class
-MIDI.n = _midi_n
+# Attach method to MIDI class (use 'bus' as parameter name in public API)
+def _midi_n_wrapper(self, pattern_str: str, c=4, mute=False, bus=None) -> 'PatternChain':
+    """Wrapper to allow 'bus' as keyword arg (avoiding shadowing global bus())."""
+    return _midi_n(self, pattern_str, c=c, mute=mute, bus_name=bus)
+
+MIDI.n = _midi_n_wrapper
 
 
 
@@ -1633,7 +2485,14 @@ def _update_midi_patterns():
             _log("patterns", f"EVENT value={e.value} whole=({float(e.whole[0]):.4f}, {float(e.whole[1]):.4f}) part=({float(e.part[0]):.4f}, {float(e.part[1]):.4f}) has_onset={e.has_onset()}", level=2)
         
         for e in events:
-            note_val = root + e.value if e.value is not None else None
+            # Resolve note value: AbsoluteNote is absolute, numbers are relative to root
+            if isinstance(e.value, AbsoluteNote):
+                note_val = e.value.midi  # Absolute MIDI from note name
+            elif isinstance(e.value, (int, float)):
+                note_val = root + e.value  # Relative offset from root
+            else:
+                note_val = None  # Rest or unknown
+            
             if note_val is not None:
                 # Calculate duration from event's whole span (use latched cycle_beats)
                 if e.whole:
@@ -1651,19 +2510,79 @@ def _update_midi_patterns():
                 note_obj.trigger(cut=False, parent=midi_wrapper.parentVoice)
 
 
+def _update_pattern_chains():
+    """Update all registered PatternChains. Called from tc.update()."""
+    try:
+        ppq = vfx.context.PPQ
+    except AttributeError:
+        return  # Not in VFX context
+    
+    current_tick = _get_current_tick()
+    
+    for chain_id in list(_chain_registry.keys()):
+        chain, cycle_beats_raw, root_raw, parent_id = _chain_registry[chain_id]
+        
+        # Skip if chain stopped
+        if not chain._running:
+            del _chain_registry[chain_id]
+            continue
+        
+        # Resolve dynamic cycle_beats each tick
+        cycle_beats = _resolve_dynamic(cycle_beats_raw)
+        try:
+            cycle_beats = float(cycle_beats)
+            if cycle_beats <= 0:
+                cycle_beats = 0.01
+        except (TypeError, ValueError):
+            cycle_beats = 4
+        
+        # Resolve dynamic root
+        root = _resolve_dynamic(root_raw)
+        chain._root = root
+        chain._cycle_beats = cycle_beats
+        
+        # Tick the chain (updates state and fires notes if not muted)
+        chain.tick(current_tick, ppq, cycle_beats)
+
+
 def stop_patterns_for_voice(parent_voice):
     """
     Stop all patterns associated with a parent voice.
-    Call this in onReleaseVoice() to clean up MIDI-bound patterns.
+    Call this in onReleaseVoice() to clean up MIDI-bound patterns and PatternChains.
     
     Args:
         parent_voice: The incoming voice that was released
     """
     voice_id = id(parent_voice)
+    
+    # Get current tick for history tracking
+    try:
+        release_tick = vfx.context.ticks
+    except AttributeError:
+        release_tick = _get_current_tick()
+    
+    # Clean up legacy _midi_patterns (for backward compatibility)
     if voice_id in _midi_patterns:
         pat, _, _, _ = _midi_patterns[voice_id]
         pat.stop()
         del _midi_patterns[voice_id]
+    
+    # Clean up PatternChains registered to this voice
+    if voice_id in _voice_chain_map:
+        for bus_name, bus_voice_id, chain_id in _voice_chain_map[voice_id]:
+            # Release from bus (moves to history)
+            if bus_name and bus_voice_id:
+                bus(bus_name).release(bus_voice_id, release_tick)
+            
+            # Remove from chain registry
+            if chain_id in _chain_registry:
+                chain, _, _, _ = _chain_registry[chain_id]
+                chain._running = False
+                if chain._pattern:
+                    chain._pattern.stop()
+                del _chain_registry[chain_id]
+        
+        del _voice_chain_map[voice_id]
 
 
 def update():
@@ -1672,19 +2591,21 @@ def update():
     
     Order of operations:
     1. Process pending triggers and releases
-    2. Update standalone patterns (tc.n)
-    3. Update MIDI-bound patterns (midi.n)
-    4. Increment tick counter (so patterns created this frame start at tick 0)
+    2. Update standalone patterns (tc.n - legacy)
+    3. Update MIDI-bound patterns (midi.n - legacy)
+    4. Update PatternChains (new bus system)
+    5. Increment tick counter (so patterns created this frame start at tick 0)
     """
     global _internal_tick
     
     _base_update()
     _update_patterns()
     _update_midi_patterns()
+    _update_pattern_chains()
     
     # Increment tick AFTER all processing, so patterns created this frame start at tick 0
     _internal_tick += 1
 
 
 # Initialization message
-print("[TrapCode] Initialized")
+print("[TrapScript] Initialized")

@@ -10,7 +10,7 @@
 
 ## Overview
 
-Design a note/voice API for TrapCode that enables programmatic MIDI note creation with minimal boilerplate while maintaining full control. This is the core creative coding feature of TrapCode.
+Design a note/voice API for TrapScript that enables programmatic MIDI note creation with minimal boilerplate while maintaining full control. This is the core creative coding feature of TrapScript.
 
 ---
 
@@ -49,7 +49,7 @@ Syncs automatically to project BPM via PPQ.
 
 **Decision**: 
 ```python
-myNote = tc.Note(m=72, v=100, l=1)
+myNote = ts.Note(m=72, v=100, l=1)
 # m = MIDI note number (0-127)
 # n = note string alternative, e.g., "C5" (mutually exclusive with m)
 # v = velocity (0-127), default 100
@@ -79,7 +79,7 @@ myNote.stop()                 # Stop looping
 
 **Example:**
 ```python
-myNote = tc.Note(m=72, v=100, l=1)
+myNote = ts.Note(m=72, v=100, l=1)
 myNote.trigger(b=1, l=0.5)
 # Triggers every 1 beat
 # Note held for 0.5 beats (50% duty cycle)
@@ -97,7 +97,7 @@ myNote.trigger(b=1, l=0.5)
 Sequence has fixed length. Notes are compressed/stretched to fit.
 
 ```python
-mySeq = tc.Sequence().mode('fit').length(1.5)
+mySeq = ts.Sequence().mode('fit').length(1.5)
 with mySeq:
     N(72)      # Calculated: 0.5 beats (1.5 / 3)
     N(73)      # Calculated: 0.5 beats
@@ -125,7 +125,7 @@ In fit mode, `l` is a **weight multiplier**, not absolute duration.
 Sequence grows based on note lengths. `.length()` sets default per-note length.
 
 ```python
-mySeq = tc.Sequence().mode('grow').length(2) # if .length isn't set defualt is 1
+mySeq = ts.Sequence().mode('grow').length(2) # if .length isn't set defualt is 1
 with mySeq:
     N(72)         # 2 beats (default)
     N(73, l=0.5)  # 0.5 beats (override)
@@ -149,7 +149,7 @@ Internally: `actual_duration = base_duration / speed`
 **Decision**: Chord is simultaneous notes.
 
 ```python
-Chord1 = tc.Chord()
+Chord1 = ts.Chord()
 with Chord1:
     N(60)  # C4
     N(64)  # E4
@@ -179,8 +179,8 @@ myGated = Chord1.trancegate(pattern=[1,0,1,0], rate=0.25, length=0.5)
 ### D7: Separation of Concerns
 
 **Decision**:
-- `tc.MIDI(incomingVoice)` — Passthrough/modification of incoming notes
-- `tc.Note(...)` — Programmatic note creation
+- `ts.MIDI(incomingVoice)` — Passthrough/modification of incoming notes
+- `ts.Note(...)` — Programmatic note creation
 
 These are separate classes with no shared base.
 
@@ -191,13 +191,13 @@ These are separate classes with no shared base.
 **Decision**: Hybrid approach — `N()` is a method on the container.
 
 ```python
-mySeq = tc.Sequence().mode('grow')
+mySeq = ts.Sequence().mode('grow')
 with mySeq as s:
     s.N(72)
     s.N(73, l=0.5)
     s.N(74, v=80)
 
-myChord = tc.Chord()
+myChord = ts.Chord()
 with myChord as c:
     c.N(60)
     c.N(64)
@@ -225,12 +225,12 @@ Formula: `actual_duration = base_duration / speed`
 
 ### D10: Scheduler Integration
 
-**Decision**: User calls `tc.update()` in `onTick()`. Scheduler processes all active triggers.
+**Decision**: User calls `ts.update()` in `onTick()`. Scheduler processes all active triggers.
 
 ```python
 def onTick():
     # User logic...
-    tc.update()  # Process triggers, fire notes, handle releases
+    ts.update()  # Process triggers, fire notes, handle releases
 ```
 
 **Key behaviors:**
@@ -247,9 +247,9 @@ def onTick():
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                      User Code                          │
-│  note = tc.Note(m=72, l=1)                              │
-│  seq = tc.Sequence().mode('grow')                       │
-│  chord = tc.Chord()                                     │
+│  note = ts.Note(m=72, l=1)                              │
+│  seq = ts.Sequence().mode('grow')                       │
+│  chord = ts.Chord()                                     │
 └─────────────────────────────────────────────────────────┘
                             │
                             ▼
@@ -274,7 +274,7 @@ def onTick():
 │  - Processes all active TriggerStates each tick         │
 │  - Fires triggers at correct times                      │
 │  - Handles auto-release                                 │
-│  - Called via tc.update() in onTick()                   │
+│  - Called via ts.update() in onTick()                   │
 └─────────────────────────────────────────────────────────┘
                             │
                             ▼
@@ -325,7 +325,7 @@ User must call something in `onTick()` to process triggers.
 
 ```python
 def onTick():
-    tc.update()  # Process all active triggers
+    ts.update()  # Process all active triggers
 ```
 
 #### Q3.1: TriggerState Structure — RESOLVED
@@ -358,7 +358,7 @@ class TriggerState:
 
 ```python
 def beats_to_ticks(beats):
-    """Convert beats to ticks. Exposed as tc.beats_to_ticks() for advanced users."""
+    """Convert beats to ticks. Exposed as ts.beats_to_ticks() for advanced users."""
     return beats * vfx.context.PPQ  # Returns float
 
 # Internal: keep float for precision
@@ -366,7 +366,7 @@ def beats_to_ticks(beats):
 ```
 
 **Decisions:**
-- Exposed as `tc.beats_to_ticks()` for advanced users
+- Exposed as `ts.beats_to_ticks()` for advanced users
 - No PPQ caching (negligible gain, added complexity)
 - Keep float internally, `int()` only at comparison time (preserves precision for cumulative calculations)
 
@@ -455,7 +455,7 @@ for voice, release_tick in self.active_voices[:]:
 
 **Note:** This is separate from sequence `.mode('cut')` vs `.mode('overlap')`, which controls note-to-note behavior within a sequence. Trigger `cut` controls iteration-to-iteration behavior.
 
-#### Q3.5: Missing tc.update() — RESOLVED
+#### Q3.5: Missing ts.update() — RESOLVED
 
 **Decision**: One-time warning on first `.trigger()` call.
 
@@ -465,7 +465,7 @@ _update_reminder_shown = False
 def trigger(self, ...):
     global _update_reminder_shown
     if not _update_reminder_shown:
-        print("[TrapCode] Reminder: Call tc.update() in onTick() for triggers to fire")
+        print("[TrapScript] Reminder: Call ts.update() in onTick() for triggers to fire")
         _update_reminder_shown = True
     # ... rest of trigger logic
 ```
@@ -522,10 +522,10 @@ This approach is critical because:
 ### Phase 1: Core Note + One-Shot Trigger
 **Scope**: Simplest possible note triggering — no looping yet.
 
-- [x] `tc.Note(m, v, l)` builder (no `n` string notation yet)
+- [x] `ts.Note(m, v, l)` builder (no `n` string notation yet)
 - [x] `.trigger()` one-shot only (fires once, releases after `l` beats)
-- [x] `tc.update()` scheduler
-- [x] `tc.beats_to_ticks()` helper
+- [x] `ts.update()` scheduler
+- [x] `ts.beats_to_ticks()` helper
 - [x] `cut=True/False` parameter (pulled forward from Phase 1.5)
 
 **User test**: Can trigger a note from a button press, note releases automatically.
@@ -556,7 +556,7 @@ This approach is critical because:
 ### Phase 2: Sequences (Grow Mode)
 **Scope**: Sequential note playback, grow mode only.
 
-- [ ] `tc.Sequence().mode('grow')`
+- [ ] `ts.Sequence().mode('grow')`
 - [ ] Context manager: `with mySeq as s: s.N(...)`
 - [ ] Sequential playback with `.trigger(b=4)`
 - [ ] `.speed()` modifier
@@ -570,7 +570,7 @@ This approach is critical because:
 ### Phase 3: Chords + Sequence Fit Mode
 **Scope**: Simultaneous notes, fit mode compression.
 
-- [ ] `tc.Chord()` with context manager
+- [ ] `ts.Chord()` with context manager
 - [ ] Chord `.trigger()` fires all notes together
 - [ ] Sequence `.mode('fit')` with weight distribution
 - [ ] `.mode('cut')` vs `.mode('overlap')` for sequences
@@ -598,7 +598,7 @@ This approach is critical because:
 
 - [ ] `n="C5"` string notation for notes
 - [ ] `quantize=True` for beat-aligned start
-- [ ] `tc.Comp` base class (if still needed)
+- [ ] `ts.Comp` base class (if still needed)
 - [ ] Voice pooling optimization (if needed)
 
 **User test**: String notation works, quantize aligns correctly.
@@ -624,7 +624,7 @@ Key insight from research: Timing is the crucial challenge. Decided on beat-rela
 ### 2026-01-31: Core Decisions
 
 Established:
-- Beat-relative timing (1=quarter, 0.5=eighth, etc.)
+- Beat-relative timing (1=quarter, 0.5=eighth, ets.)
 - Note constructor with m/n/v/l parameters
 - Trigger is looping by default, use .once() for one-shot
 - Sequence has two modes: 'fit' and 'grow'
@@ -648,7 +648,7 @@ Resolved key API questions:
 
 Resolved all scheduler questions:
 - **Q3.1 TriggerState**: Defined structure with per-state voice tracking
-- **Q3.2 Beat→Tick**: Float internally, int at comparison, exposed as `tc.beats_to_ticks()`
+- **Q3.2 Beat→Tick**: Float internally, int at comparison, exposed as `ts.beats_to_ticks()`
 - **Q3.3 Trigger Logic**: Quantize parameter for mid-song start, mode('cut'/'overlap') for sequences
 - **Q3.4 Release Tracking**: Simple voice creation, `cut=True` default for mono behavior
 - **Q3.5 Missing update()**: One-time warning reminder
@@ -667,10 +667,10 @@ Broke phases into smaller chunks with clear "user test" criteria. Each phase dep
 ### 2026-02-01: Phase 1 Complete
 
 Implemented and tested:
-- `tc.Note(m, v, l)` builder with MIDI note, velocity, length in beats
+- `ts.Note(m, v, l)` builder with MIDI note, velocity, length in beats
 - `.trigger(l=None, cut=True)` one-shot with optional length override and cut behavior
-- `tc.update()` scheduler for processing triggers
-- `tc.beats_to_ticks()` helper exposed for advanced users
+- `ts.update()` scheduler for processing triggers
+- `ts.beats_to_ticks()` helper exposed for advanced users
 
 Key learnings during implementation:
 - `vfx.context.ticks` only advances during playback — use `voice.length` for reliable auto-release

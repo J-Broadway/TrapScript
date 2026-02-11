@@ -6,4 +6,6 @@ scope/
 __pycache__/
 *.pyc
 *.pyo
+
+# Strudel experiments (not part of TrapScript)
 scope/strudel/
