@@ -540,32 +540,34 @@ print(ts.groups())  # e.g., ['Settings', 'test']
 # If no groups: [] (empty list)
 ```
 
-### 12. Voice Triggering (Note API)
+### 12. Voice Triggering (Single API)
 Programmatic MIDI note creation with beat-relative timing.
 
-#### Note Class
-Create notes with MIDI number, velocity, length, and optional voice properties.
+#### Single Class
+Create one-shot notes with MIDI number, velocity, length, and optional voice properties.
+
+> `ts.Note` and `ts.s` are aliases for `ts.Single` (backwards compat / shorthand).
 
 ```python
-myNote = ts.Note(m=72, v=100, l=1)  # C5, velocity 100, 1 beat (quarter note)
-myNote = ts.Note(midi=60, velocity=80, length=2, p=-0.5)  # Using aliases
+myNote = ts.Single(midi=72, velocity=100, length=1)  # C5, velocity 100, 1 beat
+myNote = ts.Single(m=60, v=80, l=2, p=-0.5)          # Using short aliases
 ```
 
-Parameters (aliases in parentheses):
-- `m` (`midi`): MIDI note number (0-127), default 60
-- `v` (`velocity`): Velocity (0-127), default 100
-- `l` (`length`): Length in beats, default 1 (quarter note)
+Parameters (short aliases in parentheses):
+- `midi` (`m`): MIDI note number (0-127), default 60
+- `velocity` (`v`): Velocity (0-127), default 100
+- `length` (`l`): Length in beats, default 1 (quarter note)
 - `pan` (`p`): Stereo pan (-1 left, 0 center, 1 right), default 0
 - `output` (`o`): Voice output port in Patcher (0-based), default 0
 - `fcut` (`fc`, `x`): Mod X / filter cutoff (-1 to 1), default 0
 - `fres` (`fr`, `y`): Mod Y / filter resonance (-1 to 1), default 0
 - `finePitch` (`fp`): Microtonal pitch offset (fractional notes), default 0
-- `color` (`c`): Note color / MIDI channel (0-15), default 0
+- `color`: Note color / MIDI channel (0-15), default 0
 - `releaseVelocity` (`rv`): Release velocity (0-127), default 0
 
 All aliases work both in constructor and as attributes:
 ```python
-myNote = ts.Note(midi=72, velocity=100)
+myNote = ts.Single(midi=72, velocity=100)
 myNote.midi = 60      # Same as myNote.m = 60
 myNote.x = 0.5        # Same as myNote.fcut = 0.5
 ```
@@ -582,11 +584,11 @@ Beat values:
 #### Triggering Notes
 Call `.trigger()` to queue a one-shot note, then `ts.update()` in `onTick()` to process.
 
-**Important**: Create Note instances outside `onTick()` so they persist across ticks. This is required for cut behavior to work (voice tracking).
+**Important**: Create Single instances outside `onTick()` so they persist across ticks. This is required for cut behavior to work (voice tracking).
 
 ```python
 # Create once at module level
-myNote = ts.Note(m=72, v=100, l=1)
+myNote = ts.Single(midi=72, velocity=100, length=1)
 
 def onTick():
     btn = ts.surface('mybtn')
@@ -601,10 +603,10 @@ The note fires immediately and auto-releases after the specified length.
 **Dynamic pitch**: Update properties before triggering:
 
 ```python
-myNote = ts.Note(m=60, v=100, l=1)
+myNote = ts.Single(midi=60, velocity=100, length=1)
 
 def onTick():
-    myNote.m = int(ts.par.PitchKnob.val)  # Update pitch from UI
+    myNote.midi = int(ts.par.PitchKnob.val)  # Update pitch from UI
     if ts.surface('btn').pulse():
         myNote.trigger()
     ts.update()
@@ -622,7 +624,7 @@ myNote.trigger(cut=False)   # Allow overlapping voices
 ```python
 def onTriggerVoice(incomingVoice):
     # Arpeggio notes tied to incoming MIDI
-    arp = ts.Note(m=incomingVoice.note + 12)
+    arp = ts.Single(midi=incomingVoice.note + 12)
     arp.trigger(parent=incomingVoice)  # Releases when parent releases
 
 def onReleaseVoice(incomingVoice):

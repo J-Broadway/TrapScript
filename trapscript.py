@@ -748,37 +748,35 @@ def beats_to_ticks(beats):
 class TriggerState:
     """Tracks a pending or active trigger."""
     def __init__(self, source, note_length, parent=None):
-        self.source = source           # Note instance
+        self.source = source           # Single instance
         self.note_length = note_length # Length in beats
         self.parent = parent           # Optional parent voice (for MIDI-tied notes)
         self.pending = True            # Waiting to fire
 
 
-# Alias mapping for Note parameters (alias -> canonical name)
-_NOTE_ALIASES = {
-    # MIDI note number
-    'm': 'm', 'midi': 'm',
-    # Velocity
-    'v': 'v', 'velocity': 'v',
-    # Length
-    'l': 'l', 'length': 'l',
-    # Pan
-    'pan': 'pan', 'p': 'pan',
-    # Output port
-    'output': 'output', 'o': 'output',
-    # Filter cutoff / Mod X
-    'fcut': 'fcut', 'fc': 'fcut', 'x': 'fcut',
-    # Filter resonance / Mod Y
-    'fres': 'fres', 'fr': 'fres', 'y': 'fres',
-    # Fine pitch
-    'finePitch': 'finePitch', 'fp': 'finePitch',
+# Note parameter schema: canonical name -> {aliases, default, clamp}
+_NOTE_PARAM_SCHEMA = {
+    'midi':            {'aliases': ['m'],       'default': 60,  'clamp': (0, 127)},
+    'velocity':        {'aliases': ['v'],       'default': 100, 'clamp': (0, 127)},
+    'length':          {'aliases': ['l'],       'default': 1,   'clamp': None},
+    'pan':             {'aliases': ['p'],       'default': 0,   'clamp': (-1, 1)},
+    'output':          {'aliases': ['o'],       'default': 0,   'clamp': None},
+    'fcut':            {'aliases': ['fc', 'x'], 'default': 0,   'clamp': (-1, 1)},
+    'fres':            {'aliases': ['fr', 'y'], 'default': 0,   'clamp': (-1, 1)},
+    'finePitch':       {'aliases': ['fp'],      'default': 0,   'clamp': None},
+    'color':           {'aliases': [],          'default': 0,   'clamp': (0, 15)},
+    'releaseVelocity': {'aliases': ['rv'],      'default': 0,   'clamp': (0, 127)},
 }
 
-# Default values for Note parameters
-_NOTE_DEFAULTS = {
-    'm': 60, 'v': 100, 'l': 1, 'pan': 0,
-    'output': 0, 'fcut': 0, 'fres': 0, 'finePitch': 0,
-}
+# Auto-generated reverse lookup (alias -> canonical)
+_NOTE_ALIASES = {}
+for _canonical, _info in _NOTE_PARAM_SCHEMA.items():
+    _NOTE_ALIASES[_canonical] = _canonical
+    for _alias in _info['aliases']:
+        _NOTE_ALIASES[_alias] = _canonical
+
+# Auto-generated defaults (canonical -> default)
+_NOTE_DEFAULTS = {k: v['default'] for k, v in _NOTE_PARAM_SCHEMA.items()}
 
 
 def _resolve_note_kwargs(kwargs):
@@ -787,26 +785,50 @@ def _resolve_note_kwargs(kwargs):
     for key, value in kwargs.items():
         canonical = _NOTE_ALIASES.get(key)
         if canonical is None:
-            raise TypeError(f"Note() got unexpected keyword argument '{key}'")
+            raise TypeError(f"Single() got unexpected keyword argument '{key}'")
         if canonical in resolved:
-            raise TypeError(f"Note() got multiple values for parameter '{canonical}'")
+            raise TypeError(f"Single() got multiple values for parameter '{canonical}'")
         resolved[canonical] = value
     return resolved
 
 
-class Note:
+def get_note_param_info(name):
+    """Get param info by canonical name or alias.
+    
+    Args:
+        name: Canonical parameter name or alias (e.g., 'midi', 'm', 'velocity', 'v')
+    
+    Returns:
+        Tuple of (canonical_name, schema_dict) or (None, None) if not found.
+        schema_dict has keys: 'aliases', 'default', 'clamp'
     """
-    Programmatic note for triggering voices.
+    canonical = _NOTE_ALIASES.get(name)
+    if canonical:
+        return canonical, _NOTE_PARAM_SCHEMA[canonical]
+    return None, None
+
+
+class Single:
+    """
+    One-shot programmatic note for triggering voices.
+    
+    Canonical names are long-form; short aliases also accepted.
     
     Args (aliases in parentheses):
-        m (midi): MIDI note number (0-127)
-        v (velocity): Velocity (0-127), default 100
-        l (length): Length in beats, default 1 (quarter note)
+        midi (m): MIDI note number (0-127), default 60
+        velocity (v): Velocity (0-127), default 100
+        length (l): Length in beats, default 1 (quarter note)
         pan (p): Stereo pan (-1 left, 0 center, 1 right), default 0
         output (o): Voice output port (0-based), default 0
         fcut (fc, x): Mod X / filter cutoff (-1 to 1), default 0
         fres (fr, y): Mod Y / filter resonance (-1 to 1), default 0
         finePitch (fp): Microtonal pitch offset (fractional notes), default 0
+        color: Note color / MIDI channel (0-15), default 0
+        releaseVelocity (rv): Release velocity (0-127), default 0
+    
+    Aliases:
+        ts.Note = ts.Single (backwards compat)
+        ts.s = ts.Single (shorthand)
     """
     def __init__(self, **kwargs):
         # Resolve aliases to canonical names
@@ -817,32 +839,31 @@ class Note:
             if key not in params:
                 params[key] = default
         
-        # Set canonical attributes with validation
-        self.m = _clamp(params['m'], 0, 127)
-        self.v = _clamp(params['v'], 0, 127)
-        self.l = params['l']
-        self.pan = _clamp(params['pan'], -1, 1)
-        self.output = int(params['output'])
-        self.fcut = _clamp(params['fcut'], -1, 1)
-        self.fres = _clamp(params['fres'], -1, 1)
-        self.finePitch = params['finePitch']
-        self._voices = []  # Active voices for this Note
+        # Set canonical attributes using schema clamp info
+        for key, info in _NOTE_PARAM_SCHEMA.items():
+            val = params[key]
+            if info['clamp']:
+                val = _clamp(val, *info['clamp'])
+            if key == 'output':
+                val = int(val)
+            setattr(self, key, val)
+        self._voices = []  # Active voices for this Single
     
-    # Property aliases for attribute access
+    # Short alias properties (delegate to canonical long names)
     @property
-    def midi(self): return self.m
-    @midi.setter
-    def midi(self, val): self.m = _clamp(val, 0, 127)
-    
-    @property
-    def velocity(self): return self.v
-    @velocity.setter
-    def velocity(self, val): self.v = _clamp(val, 0, 127)
+    def m(self): return self.midi
+    @m.setter
+    def m(self, val): self.midi = _clamp(val, 0, 127)
     
     @property
-    def length(self): return self.l
-    @length.setter
-    def length(self, val): self.l = val
+    def v(self): return self.velocity
+    @v.setter
+    def v(self, val): self.velocity = _clamp(val, 0, 127)
+    
+    @property
+    def l(self): return self.length
+    @l.setter
+    def l(self, val): self.length = val
     
     @property
     def p(self): return self.pan
@@ -879,6 +900,11 @@ class Note:
     @fp.setter
     def fp(self, val): self.finePitch = val
     
+    @property
+    def rv(self): return self.releaseVelocity
+    @rv.setter
+    def rv(self, val): self.releaseVelocity = _clamp(val, 0, 127)
+    
     def trigger(self, l=None, cut=True, parent=None):
         """
         Queue a one-shot trigger.
@@ -897,11 +923,16 @@ class Note:
                 voice.release()
             self._voices.clear()
         
-        length = l if l is not None else self.l
+        length = l if l is not None else self.length
         state = TriggerState(source=self, note_length=length, parent=parent)
         _trigger_queue.append(state)
         _check_update_reminder()
         return self
+
+
+# Backwards compatibility and shorthand aliases
+Note = Single
+s = Single
 
 
 def _check_update_reminder():
@@ -919,17 +950,18 @@ def _fire_note(state, current_tick):
     # Track parent relationship (if any) in module dict
     if state.parent is not None:
         _voice_parents[voice] = state.parent
-    voice.note = src.m
-    voice.velocity = src.v / 127.0  # Normalize MIDI 0-127 to 0-1
+    voice.note = src.midi
+    voice.velocity = src.velocity / 127.0  # Normalize MIDI 0-127 to 0-1
     voice.length = int(beats_to_ticks(state.note_length))  # FL auto-releases after this
     voice.pan = src.pan
     voice.output = src.output
     voice.fcut = src.fcut
     voice.fres = src.fres
     voice.finePitch = src.finePitch
+    voice.color = src.color
     voice.trigger()
     
-    # Track on Note instance for cut behavior
+    # Track on Single instance for cut behavior
     state.source._voices.append(voice)
     
     # Track globally for cleanup
@@ -966,7 +998,7 @@ def _base_update():
     # Clean up expired voice tracking (FL auto-releases via v.length)
     for source, voice, release_tick in _active_voices[:]:
         if current_tick >= int(release_tick):
-            # Remove from Note's voice list
+            # Remove from Single's voice list
             if voice in source._voices:
                 source._voices.remove(voice)
             # Clean up parent tracking
@@ -1642,11 +1674,11 @@ class PatternChain:
             if self._state['length']:
                 duration_beats = self._state['length']
             
-            note_obj = Note(
-                m=int(midi_note),
-                l=duration_beats,
-                v=int(self._state['velocity'] * 127),
-                p=self._state['pan'],
+            note_obj = Single(
+                midi=int(midi_note),
+                length=duration_beats,
+                velocity=int(self._state['velocity'] * 127),
+                pan=self._state['pan'],
             )
             
             # Get parent voice for triggering
@@ -2541,7 +2573,7 @@ def _update_patterns():
                 # Clamp minimum duration
                 duration_beats = max(0.01, duration_beats)
                 
-                note = Note(m=int(note_val), l=duration_beats)
+                note = Single(midi=int(note_val), length=duration_beats)
                 note.trigger(cut=False)
 
 
@@ -2719,11 +2751,11 @@ def _midi_n(self, pattern_str: str, c=None, scale=None, mute=False, bus_name=Non
 
 
 # Attach method to MIDI class (use 'bus' as parameter name in public API)
-def _midi_n_wrapper(self, pattern_str: str, c=None, scale=None, mute=False, bus=None) -> 'PatternChain':
+def _midi_note_wrapper(self, pattern_str: str, c=None, scale=None, mute=False, bus=None) -> 'PatternChain':
     """Wrapper to allow 'bus' as keyword arg (avoiding shadowing global bus())."""
     return _midi_n(self, pattern_str, c=c, scale=scale, mute=mute, bus_name=bus)
 
-MIDI.n = _midi_n_wrapper
+MIDI.n = _midi_note_wrapper  # Note: .note() not available (conflicts with vfx.Voice.note attribute)
 
 
 
@@ -2802,7 +2834,7 @@ def _update_midi_patterns():
                 
                 _log("patterns", f"TRIGGER note={note_val} duration={duration_beats:.3f} beats", level=1)
                 
-                note_obj = Note(m=int(note_val), l=duration_beats)
+                note_obj = Single(midi=int(note_val), length=duration_beats)
                 note_obj.trigger(cut=False, parent=midi_wrapper.parentVoice)
 
 
