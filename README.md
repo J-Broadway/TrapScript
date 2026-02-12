@@ -560,6 +560,8 @@ Parameters (aliases in parentheses):
 - `fcut` (`fc`, `x`): Mod X / filter cutoff (-1 to 1), default 0
 - `fres` (`fr`, `y`): Mod Y / filter resonance (-1 to 1), default 0
 - `finePitch` (`fp`): Microtonal pitch offset (fractional notes), default 0
+- `color` (`c`): Note color / MIDI channel (0-15), default 0
+- `releaseVelocity` (`rv`): Release velocity (0-127), default 0
 
 All aliases work both in constructor and as attributes:
 ```python
