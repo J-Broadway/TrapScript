@@ -245,10 +245,13 @@ chords = _Registry('chords', {
 # -----------------------------
 class MIDI(vfx.Voice):
     parentVoice = None
-    def __init__(self, incomingVoice, c=4, scale=None):
+    def __init__(self, incomingVoice, cycle=4, scale=None, **kwargs):
+        cycle = kwargs.pop('c', cycle)
+        if kwargs:
+            raise TypeError(f"MIDI() got unexpected keyword arguments: {list(kwargs.keys())}")
         super().__init__(incomingVoice)
         self.parentVoice = incomingVoice
-        self._c = c                    # Default cycle beats
+        self._cycle = cycle              # Default cycle beats
         self._scale = None             # Scale intervals (e.g., [0,2,3,5,7,8,10])
         self._scale_root = None        # Scale root as MIDI note (e.g., 72 for C5)
         
@@ -778,6 +781,37 @@ for _canonical, _info in _NOTE_PARAM_SCHEMA.items():
 # Auto-generated defaults (canonical -> default)
 _NOTE_DEFAULTS = {k: v['default'] for k, v in _NOTE_PARAM_SCHEMA.items()}
 
+# --- Pattern Parameter Schema ---
+_PATTERN_PARAM_SCHEMA = {
+    'cycle': {'aliases': ['c'], 'default': 4, 'clamp': (0.01, None)},
+    'root':  {'aliases': ['r'], 'default': 60, 'clamp': (0, 127)},
+}
+
+
+def _resolve_pattern_kwargs(func_name, kwargs, keys=None):
+    """Resolve aliased pattern kwargs (c -> cycle, r -> root).
+    
+    Args:
+        func_name: Name of calling function (for error messages).
+        kwargs: The **kwargs dict to consume aliases from.
+        keys: Optional list of canonical names to resolve. If None, resolves all.
+    
+    Returns:
+        Dict of {canonical_name: value} for any aliases found in kwargs.
+    """
+    resolved = {}
+    for canonical, info in _PATTERN_PARAM_SCHEMA.items():
+        if keys is not None and canonical not in keys:
+            continue
+        for alias in info['aliases']:
+            if alias in kwargs:
+                if canonical in resolved:
+                    raise TypeError(f"{func_name}() got multiple values for parameter '{canonical}'")
+                resolved[canonical] = kwargs.pop(alias)
+    if kwargs:
+        raise TypeError(f"{func_name}() got unexpected keyword arguments: {list(kwargs.keys())}")
+    return resolved
+
 
 def _resolve_note_kwargs(kwargs):
     """Resolve aliased kwargs to canonical parameter names."""
@@ -905,25 +939,30 @@ class Single:
     @rv.setter
     def rv(self, val): self.releaseVelocity = _clamp(val, 0, 127)
     
-    def trigger(self, l=None, cut=True, parent=None):
+    def trigger(self, length=None, cut=True, parent=None, **kwargs):
         """
         Queue a one-shot trigger.
         
         Args:
-            l: Optional length override in beats
+            length: Optional length override in beats. Alias: l
             cut: If True (default), release previous voices before triggering
             parent: Optional parent voice (ties note to incoming MIDI for release)
         
         Returns:
             self for chaining
         """
+        # Resolve alias: l -> length
+        length = kwargs.pop('l', length)
+        if kwargs:
+            raise TypeError(f"trigger() got unexpected keyword arguments: {list(kwargs.keys())}")
+        
         # Cut previous voices if requested
         if cut:
             for voice in self._voices:
                 voice.release()
             self._voices.clear()
         
-        length = l if l is not None else self.length
+        length = length if length is not None else self.length
         state = TriggerState(source=self, note_length=length, parent=parent)
         _trigger_queue.append(state)
         _check_update_reminder()
@@ -1834,6 +1873,9 @@ def bus(name: str) -> BusRegistry:
         _buses[name].name = name
     return _buses[name]
 
+# Internal reference to bus() — used in functions where 'bus' parameter shadows the global
+_get_bus = bus
+
 
 # Chain registry: tracks all active PatternChains for update loop
 # Maps: id(chain) -> (chain, cycle_beats, root, parent_voice_id)
@@ -2580,21 +2622,21 @@ def _update_patterns():
 # -----------------------------
 # Public API: tc.n() / tc.note()
 # -----------------------------
-def note(pattern_str: str, c=4, root=60, parent=None, mute=False, bus_name=None) -> 'PatternChain':
+def note(pattern_str: str, cycle=4, root=60, parent=None, mute=False, bus=None, **kwargs) -> 'PatternChain':
     """
     Create a standalone pattern from mini-notation.
     
     Args:
         pattern_str: Mini-notation string (e.g., "0 3 5 7")
-        c: Cycle duration in beats (default 4 = one bar).
-           Can be a static value OR a UI wrapper for dynamic updates.
-        root: Root note (default 60 = C4). Values in pattern are offsets from root.
+        cycle: Cycle duration in beats (default 4 = one bar). Alias: c
+               Can be a static value OR a UI wrapper for dynamic updates.
+        root: Root note (default 60 = C4). Values in pattern are offsets from root. Alias: r
               Can be a static value OR a UI wrapper for dynamic updates.
         parent: Optional parent voice (ties pattern to voice lifecycle).
                 If provided, pattern is cleaned up via stop_patterns_for_voice().
                 If None, pattern persists until .stop() is called.
         mute: If True, pattern is ghost/silent (state-only, no audio). Default False.
-        bus_name: Optional bus name for cross-scope state access.
+        bus: Optional bus name for cross-scope state access.
     
     Returns:
         PatternChain object (auto-started)
@@ -2602,19 +2644,24 @@ def note(pattern_str: str, c=4, root=60, parent=None, mute=False, bus_name=None)
     Example:
         # Tied to voice lifecycle
         def onTriggerVoice(v):
-            tc.n("<0 3 5>", c=4, parent=v, bus='melody')
+            tc.n("<0 3 5>", cycle=4, parent=v, bus='melody')
         
         # Persistent (manual cleanup required)
         _clock = None
         def onTick():
             global _clock
             if _clock is None:
-                _clock = tc.n("<0 1 2 3>", c=1, mute=True, bus='clock')
+                _clock = tc.n("<0 1 2 3>", cycle=1, mute=True, bus='clock')
             tc.update()
         
         # Manual cleanup
         _clock.stop()
     """
+    # Resolve aliases: c -> cycle, r -> root
+    aliases = _resolve_pattern_kwargs('note', kwargs)
+    cycle = aliases.get('cycle', cycle)
+    root = aliases.get('root', root)
+    
     # Create PatternChain (no MIDI wrapper for standalone patterns)
     chain = PatternChain(midi_wrapper=None, mute=mute)
     
@@ -2622,35 +2669,38 @@ def note(pattern_str: str, c=4, root=60, parent=None, mute=False, bus_name=None)
     pat = _parse_mini(pattern_str)
     chain._pattern = pat
     chain._root = root
-    chain._cycle_beats = c
+    chain._cycle_beats = cycle
     chain._parent_voice = parent
     
     # Expose parent voice in state (if provided)
     chain._state['parentVoice'] = parent
     
     # Register to bus if name provided
-    if bus_name:
-        voice_id = bus(bus_name).register(chain)
-        chain._bus_name = bus_name
+    if bus:
+        voice_id = _get_bus(bus).register(chain)
+        chain._bus_name = bus
         chain._bus_voice_id = voice_id
     
     # Auto-start the underlying pattern
     pat.start(_get_current_tick())
     
     # Register chain for update loop
-    _register_chain(parent, chain, c, root)
+    _register_chain(parent, chain, cycle, root)
     
     return chain
 
 
-def n(pattern_str: str, c=4, root=60, parent=None, mute=False, bus=None) -> 'PatternChain':
+def n(pattern_str: str, cycle=4, root=60, parent=None, mute=False, bus=None, **kwargs) -> 'PatternChain':
     """
     Create a standalone pattern from mini-notation.
     
-    Alias for tc.note() with 'bus' as keyword arg name.
-    See tc.note() for full documentation.
+    Alias for tc.note(). See tc.note() for full documentation.
     """
-    return note(pattern_str, c=c, root=root, parent=parent, mute=mute, bus_name=bus)
+    # Resolve aliases: c -> cycle, r -> root
+    aliases = _resolve_pattern_kwargs('n', kwargs)
+    cycle = aliases.get('cycle', cycle)
+    root = aliases.get('root', root)
+    return note(pattern_str, cycle=cycle, root=root, parent=parent, mute=mute, bus=bus)
 
 
 # -----------------------------
@@ -2669,30 +2719,34 @@ def _resolve_dynamic(value):
     return value
 
 
-def _midi_n(self, pattern_str: str, c=None, scale=None, mute=False, bus_name=None) -> 'PatternChain':
+def _midi_n(self, pattern_str: str, cycle=None, scale=None, mute=False, bus=None, **kwargs) -> 'PatternChain':
     """
     Create a pattern from mini-notation, using this voice's note as root.
     
     Args:
         pattern_str: Mini-notation string (e.g., "0 3 5 7")
-        c: Cycle duration in beats. Inherits from MIDI instance if None.
-           Can be a static value OR a UI wrapper (e.g., ts.par.MyKnob) for dynamic updates.
+        cycle: Cycle duration in beats. Inherits from MIDI instance if None. Alias: c
+               Can be a static value OR a UI wrapper (e.g., ts.par.MyKnob) for dynamic updates.
         scale: Scale string (e.g., "c5:major"). Inherits from MIDI instance if None.
         mute: If True, pattern is ghost/silent (state-only, no audio). Default False.
-        bus_name: Optional bus name for cross-scope state access.
+        bus: Optional bus name for cross-scope state access.
     
     Returns:
         PatternChain object (auto-started, tied to this voice's lifecycle)
     
     Example:
         def onTriggerVoice(incomingVoice):
-            midi = ts.MIDI(incomingVoice, c=4, scale="c5:major")
-            midi.n("0 2 4 6")              # Inherits c=4, scale=c5:major -> Cmaj7
-            midi.n("0 2 4", c=2)           # c overridden to 2
+            midi = ts.MIDI(incomingVoice, cycle=4, scale="c5:major")
+            midi.n("0 2 4 6")              # Inherits cycle=4, scale=c5:major -> Cmaj7
+            midi.n("0 2 4", cycle=2)       # cycle overridden to 2
             midi.n("0 2 4", scale="a4:minor")  # Scale overridden
     """
+    # Resolve alias: c -> cycle
+    aliases = _resolve_pattern_kwargs('midi.n', kwargs, keys=['cycle'])
+    cycle = aliases.get('cycle', cycle)
+    
     # Inherit from MIDI instance if not overridden
-    cycle_beats = c if c is not None else self._c
+    cycle_beats = cycle if cycle is not None else self._cycle
     
     # Parse scale if provided at .n() level, else inherit from MIDI
     if scale is not None:
@@ -2731,11 +2785,11 @@ def _midi_n(self, pattern_str: str, c=None, scale=None, mute=False, bus_name=Non
         self._bus_registrations = []
     
     # Register to bus if name provided
-    if bus_name:
-        voice_id = bus(bus_name).register(chain)
-        chain._bus_name = bus_name
+    if bus:
+        voice_id = _get_bus(bus).register(chain)
+        chain._bus_name = bus
         chain._bus_voice_id = voice_id
-        self._bus_registrations.append((bus_name, voice_id))
+        self._bus_registrations.append((bus, voice_id))
     
     # Auto-start the underlying pattern
     pat.start(_get_current_tick())
@@ -2751,9 +2805,9 @@ def _midi_n(self, pattern_str: str, c=None, scale=None, mute=False, bus_name=Non
 
 
 # Attach method to MIDI class (use 'bus' as parameter name in public API)
-def _midi_note_wrapper(self, pattern_str: str, c=None, scale=None, mute=False, bus=None) -> 'PatternChain':
-    """Wrapper to allow 'bus' as keyword arg (avoiding shadowing global bus())."""
-    return _midi_n(self, pattern_str, c=c, scale=scale, mute=mute, bus_name=bus)
+def _midi_note_wrapper(self, pattern_str: str, cycle=None, scale=None, mute=False, bus=None, **kwargs) -> 'PatternChain':
+    """Wrapper that passes through to _midi_n with alias support."""
+    return _midi_n(self, pattern_str, cycle=cycle, scale=scale, mute=mute, bus=bus, **kwargs)
 
 MIDI.n = _midi_note_wrapper  # Note: .note() not available (conflicts with vfx.Voice.note attribute)
 

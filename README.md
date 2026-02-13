@@ -23,7 +23,7 @@ def createDialog():
 
 def onTriggerVoice(incomingVoice):
     midi = ts.MIDI(incomingVoice)
-    ts.n("0 3 5 <3 5>", c=4)
+    ts.n("0 3 5 <3 5>", cycle=4)
     # midi.trigger()
 
 def onReleaseVoice(incomingVoice):
@@ -52,7 +52,7 @@ Simplifies voice modification by subclassing `vfx.Voice` and preserving the pare
 
 **Parameters**:
 - `incomingVoice`: The MIDI voice to wrap
-- `c`: Default cycle beats for `.n()` patterns (default 4)
+- `cycle`: Default cycle beats for `.n()` patterns (default 4). Alias: `c`
 - `scale`: Default scale string for `.n()` patterns (default None = chromatic mode)
 
 **Code Example**:
@@ -65,8 +65,8 @@ def onTriggerVoice(incomingVoice):
 **With Defaults**:
 ```python
 def onTriggerVoice(incomingVoice):
-    midi = ts.MIDI(incomingVoice, c=2, scale="c5:major")
-    midi.n("0 2 4")  # Inherits c=2, plays C5 E5 G5 (major triad)
+    midi = ts.MIDI(incomingVoice, cycle=2, scale="c5:major")
+    midi.n("0 2 4")  # Inherits cycle=2, plays C5 E5 G5 (major triad)
 ```
 
 ### 1b. Scale System
@@ -116,9 +116,9 @@ midi.n("c4 e4 g4")  # C4, Eb4, G4 (e4 snaps to eb4 in C minor)
 
 **Override at `.n()` Level**:
 ```python
-midi = ts.MIDI(v, c=4, scale="c5:major")
-midi.n("0 2 4")                    # Inherits c=4, C major
-midi.n("0 2 4", c=2)               # c overridden to 2
+midi = ts.MIDI(v, cycle=4, scale="c5:major")
+midi.n("0 2 4")                    # Inherits cycle=4, C major
+midi.n("0 2 4", cycle=2)           # cycle overridden to 2
 midi.n("0 2 4", scale="a4:minor")  # Scale overridden to A minor
 ```
 
@@ -594,7 +594,7 @@ def onTick():
     btn = ts.surface('mybtn')
     if btn.pulse():
         myNote.trigger()       # Queue the note
-        myNote.trigger(l=0.5)  # Override length to half beat
+        myNote.trigger(length=0.5)  # Override length to half beat
     ts.update()  # Process triggers and releases
 ```
 
@@ -652,7 +652,7 @@ Generate rhythmic patterns using Strudel/TidalCycles-inspired mini-notation. Pat
 #### Basic Usage
 ```python
 # Standalone pattern (plays absolute MIDI notes)
-pattern = ts.n("60 62 64 65", c=4)  # 4 notes over 4 beats
+pattern = ts.n("60 62 64 65", cycle=4)  # 4 notes over 4 beats
 pattern.start()
 
 def onTick():
@@ -750,7 +750,7 @@ Patterns can follow incoming MIDI notes:
 ```python
 def onTriggerVoice(incomingVoice):
     midi = ts.MIDI(incomingVoice)
-    midi.n("0 3 5 7", c=4)  # Arpeggio from incoming note
+    midi.n("0 3 5 7", cycle=4)  # Arpeggio from incoming note
     midi.trigger()
 
 def onReleaseVoice(incomingVoice):
@@ -769,11 +769,11 @@ The pattern uses the incoming MIDI note as root and stops when the parent voice 
 def onTriggerVoice(incomingVoice):
     # Chromatic mode: 0 3 5 7 = semitone offsets from incoming note
     midi = ts.MIDI(incomingVoice)
-    midi.n("0 3 5 7", c=4)
+    midi.n("0 3 5 7", cycle=4)
     
     # Scale mode: 0 2 4 6 = degrees 1, 3, 5, 7 of C major (Cmaj7)
     midi = ts.MIDI(incomingVoice, scale="c5:major")
-    midi.n("0 2 4 6", c=4)  # C5, E5, G5, B5
+    midi.n("0 2 4 6", cycle=4)  # C5, E5, G5, B5
 ```
 
 See Section 1b for full scale system documentation.
@@ -794,41 +794,41 @@ pattern.reset()           # Restart from beginning
 ```
 
 #### Cycle Duration
-The `c` parameter sets cycle length in beats:
+The `cycle` parameter sets cycle length in beats (alias: `c`):
 ```python
-ts.n("60 62 64 65", c=4)  # 4 beats = 1 bar in 4/4
-ts.n("60 62 64", c=2)     # 2 beats = half bar
-ts.n("60 62", c=1)        # 1 beat = quarter note total
+ts.n("60 62 64 65", cycle=4)  # 4 beats = 1 bar in 4/4
+ts.n("60 62 64", cycle=2)     # 2 beats = half bar
+ts.n("60 62", cycle=1)        # 1 beat = quarter note total
 ```
 
 #### Advanced Examples
 ```python
 # Note name melody
-ts.n("c4 e4 g4 c5", c=4)  # C major arpeggio
+ts.n("c4 e4 g4 c5", cycle=4)  # C major arpeggio
 
 # Chord with note names
-ts.n("[c4, e4, g4]", c=4)  # C major chord
+ts.n("[c4, e4, g4]", cycle=4)  # C major chord
 
 # Euclidean-style pattern with rests
-ts.n("c4 ~ ~ c4 ~ c4 ~ ~", c=8)  # 3 hits over 8 slots
+ts.n("c4 ~ ~ c4 ~ c4 ~ ~", cycle=8)  # 3 hits over 8 slots
 
 # Fast arpeggio
-ts.n("c4 e4 g4 c5", c=1)  # Full arpeggio in 1 beat
+ts.n("c4 e4 g4 c5", cycle=1)  # Full arpeggio in 1 beat
 
 # Weighted sequence
-ts.n("<0@2 1 2 3>", c=4)  # 0 lasts twice as long as others
+ts.n("<0@2 1 2 3>", cycle=4)  # 0 lasts twice as long as others
 
 # Complex rhythm
-ts.n("c4 [d4 e4]*2 ~ f4", c=4)  # Subdivision with fast modifier
+ts.n("c4 [d4 e4]*2 ~ f4", cycle=4)  # Subdivision with fast modifier
 
 # Polyphonic arpeggio with random notes
-ts.n("c4 e4 g4 c5, c5?", c=4)  # Arpeggio + random high octave
+ts.n("c4 e4 g4 c5, c5?", cycle=4)  # Arpeggio + random high octave
 
 # Replicated pattern with weighting
-ts.n("[c4 e4 g4]!2, c3@2 c4", c=4)  # Arp x2 layered with weighted bass
+ts.n("[c4 e4 g4]!2, c3@2 c4", cycle=4)  # Arp x2 layered with weighted bass
 
 # Probability-based variation
-ts.n("c4 e4? g4 b4?", c=2)  # Root and 5th always, 3rd and 7th random
+ts.n("c4 e4? g4 b4?", cycle=2)  # Root and 5th always, 3rd and 7th random
 
 # Mixed absolute and relative
 ts.n("c4 0 4 7", root=48)  # c4 absolute (60), then offsets from C3 (48)
@@ -845,7 +845,7 @@ Register patterns to named buses for cross-scope state access. This enables usin
 ```python
 def onTriggerVoice(incomingVoice):
     midi = ts.MIDI(incomingVoice)
-    midi.n("<0 1 2 3>", c=4, bus='melody')  # Register to 'melody' bus
+    midi.n("<0 1 2 3>", cycle=4, bus='melody')  # Register to 'melody' bus
 
 def onReleaseVoice(incomingVoice):
     ts.stop_patterns_for_voice(incomingVoice)  # Auto-cleanup
@@ -855,14 +855,14 @@ def onReleaseVoice(incomingVoice):
 ```python
 # Tied to voice lifecycle
 def onTriggerVoice(v):
-    ts.n("<0 3 5>", c=4, parent=v, bus='melody')
+    ts.n("<0 3 5>", cycle=4, parent=v, bus='melody')
 
 # Persistent (manual cleanup required)
 _clock = None
 def onTick():
     global _clock
     if _clock is None:
-        _clock = ts.n("<0 1 2 3>", c=1, mute=True, bus='clock')
+        _clock = ts.n("<0 1 2 3>", cycle=1, mute=True, bus='clock')
     ts.update()
 
 # Manual cleanup
@@ -873,7 +873,7 @@ _clock.stop()
 
 Use `mute=True` for patterns that track state without producing sound:
 ```python
-midi.n("<0 1 2 3>", c=1, mute=True, bus='clock')
+midi.n("<0 1 2 3>", cycle=1, mute=True, bus='clock')
 
 # In onTick, use as a sequencer clock
 clock = ts.bus('clock').oldest()
