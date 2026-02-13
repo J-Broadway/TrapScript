@@ -11,16 +11,18 @@ Introduce `ts.comp()` — a standalone pattern context with the same OOP structu
 ## Design: Abstract Base Class + Template Method
 
 ```python
-class _PatternContext:
+class _CompContext:
     """Base: shared defaults, scale handling, pattern creation."""
     
     def __init__(self, c=4, scale=None, root=None, v=1.0, pan=0.0, parent=None):
         # Store defaults, parse scale
     
-    def n(self, pattern_str, c=None, scale=None, ...) -> PatternChain:
-        # Shared pattern creation logic
+    def note(self, pattern_str, c=None, scale=None, ...) -> PatternChain:
+        """Canonical method for pattern creation."""
         chain._root = self._resolve_root(scale, scale_root)  # Template method
         self._on_pattern_created(chain)  # Template method
+    
+    n = note  # Alias (per alias_refactor.md)
     
     def _resolve_root(self, scale, scale_root):
         raise NotImplementedError
@@ -29,7 +31,7 @@ class _PatternContext:
         pass  # Override for lifecycle behavior
 
 
-class MIDI(vfx.Voice, _PatternContext):
+class MIDI(vfx.Voice, _CompContext):
     """Voice-bound context. Auto-triggers, auto-releases."""
     
     def _resolve_root(self, scale, scale_root):
@@ -39,7 +41,7 @@ class MIDI(vfx.Voice, _PatternContext):
         # Auto-start, register for voice lifecycle
 
 
-class Comp(_PatternContext):
+class Comp(_CompContext):
     """Standalone context. Manual trigger/release."""
     
     def __init__(self, c=4, scale=None, root=60, v=1.0, pan=0.0, parent=None):

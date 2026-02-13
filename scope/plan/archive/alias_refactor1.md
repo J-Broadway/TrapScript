@@ -85,7 +85,51 @@ for canonical, info in _NOTE_PARAM_SCHEMA.items():
 
 ---
 
-## Part 2: Function Aliases (tc.n / tc.note, MIDI.n)
+## Part 2: Pattern Parameter Aliases (cycle, root)
+
+### Current State
+
+Pattern functions (`note()`, `n()`, `MIDI.n()`) use short parameter names:
+
+| Current (Canonical) | Proposed Canonical | Alias | Location |
+|---------------------|-------------------|-------|----------|
+| `c` | `cycle` | `c` | `note()`, `n()`, `MIDI.__init__()`, `MIDI.n()` |
+| `root` | `root` | `r` | `note()`, `n()`, `MIDI.n()` |
+
+### Proposed Schema
+
+```python
+# Pattern parameter aliases (separate from note params)
+_PATTERN_PARAM_SCHEMA = {
+    'cycle': {'aliases': ['c'], 'default': 4, 'clamp': (0.01, None)},
+    'root':  {'aliases': ['r'], 'default': 60, 'clamp': (0, 127)},
+}
+```
+
+### Changes Required
+
+1. Rename `c` → `cycle` in function signatures:
+   - `note(pattern_str, cycle=4, root=60, ...)` 
+   - `n(pattern_str, cycle=4, root=60, ...)`
+   - `MIDI.__init__(incomingVoice, cycle=4, scale=None)`
+   - `MIDI.n(pattern_str, cycle=None, scale=None, ...)`
+2. Add `c` as accepted kwarg alias (resolve in function body)
+3. Rename internal storage: `self._c` → `self._cycle`
+4. Add `r` as alias for `root`
+5. Rename `bus_name` → `bus` in `note()` signature (consistency with `n()`)
+6. Update all internal usages
+
+### Backwards Compatibility
+
+Both forms should work:
+- `midi.n("0 1 2", cycle=8)` (canonical)
+- `midi.n("0 1 2", c=8)` (alias)
+- `ts.note("0 1 2", c=8, r=60)` (aliases)
+- `ts.note("0 1 2", cycle=8, root=60)` (canonical)
+
+---
+
+## Part 3: Function Aliases (tc.n / tc.note, MIDI.n)
 
 ### Current State
 
@@ -128,7 +172,7 @@ _FUNCTION_ALIASES = {
 
 ---
 
-## Part 3: Cross-Class Schema Access
+## Part 4: Cross-Class Schema Access
 
 For classes like `Voicing`, `PatternChain` that may need to reference note parameters:
 
@@ -150,7 +194,41 @@ def _validate_param(self, name):
 
 ---
 
-## Part 4: Class Rename - `ts.Note` → `ts.Single`
+## Part 5: Method Parameter Aliases
+
+### Single.trigger()
+
+Current signature uses short param name:
+
+```python
+def trigger(self, l=None, cut=True, parent=None):
+```
+
+Should be:
+
+```python
+def trigger(self, length=None, cut=True, parent=None):
+```
+
+With `l` accepted as alias via kwarg resolution.
+
+### UI Control Parameters (Optional/Low Priority)
+
+The UI factory methods use inconsistent default parameter naming:
+
+| Method | Current | Proposed Canonical | Alias |
+|--------|---------|-------------------|-------|
+| `Knob()` | `d=0` | `default=0` | `d` |
+| `KnobInt()` | `d=0` | `default=0` | `d` |
+| `Combo()` | `d=0` | `default=0` | `d` |
+| `Checkbox()` | `default=False` | `default=False` | — |
+| `Text()` | `default=''` | `default=''` | — |
+
+**Decision**: Low priority. These are UI-layer, not core pattern/note API. Could standardize later.
+
+---
+
+## Part 6: Class Rename - `ts.Note` → `ts.Single`
 
 ### Background
 
@@ -189,6 +267,8 @@ This was identified in `strudel_mini_notation.md` with a decision to rename, but
 | Category | Canonical → Alias |
 |----------|-------------------|
 | **Note params** | `midi` → `m`, `velocity` → `v`, `length` → `l`, etc. |
+| **Pattern params** | `cycle` → `c`, `root` → `r` |
+| **Method params** | `Single.trigger(length=)` → `l` |
 | **One-shot class** | `ts.Single()` → `ts.s()` (renamed from `ts.Note`) |
 | **Pattern functions** | `tc.note()` → `tc.n()` |
 | **MIDI methods** | `midi.note()` → `midi.n()` |
@@ -210,13 +290,16 @@ Phase 1.3.3 introduces `_PatternContext` as an abstract base class that both `MI
 ```
 Alias Refactor (this plan)
 ├── Part 1: _NOTE_PARAM_SCHEMA (foundation) ✓ Do now
-├── Part 4: Note → Single rename ✓ Do now
-├── Part 2: MIDI.note() ⏸ Defer to _PatternContext
-└── Part 3: Cross-class access ✓ Do now (needed by _PatternContext)
+├── Part 2: _PATTERN_PARAM_SCHEMA (cycle/c, root/r) ✓ Do now
+├── Part 4: Cross-class access ✓ Do now (needed by _PatternContext)
+├── Part 5: Method params (trigger length) ✓ Do now
+├── Part 6: Note → Single rename ✓ Do now
+├── Part 3: MIDI.note() ⏸ Defer to _PatternContext
+└── Pattern function parameters (Part 2 applies to signatures)
 
 Phase 1.3.3 (_PatternContext)
-├── _PatternContext base class (inherits schema from Part 1)
-├── .note() / .n() in base class (Part 2 happens here)
+├── _PatternContext base class (inherits schemas from Part 1 & 2)
+├── .note() / .n() in base class (Part 3 happens here)
 ├── Comp class
 └── Deprecate tc.note() / tc.n()
 ```
@@ -225,11 +308,13 @@ Phase 1.3.3 (_PatternContext)
 
 1. **Do now (Alias Refactor):**
    - Part 1: `_NOTE_PARAM_SCHEMA` — foundational
-   - Part 4: `Note` → `Single` — independent, clears naming confusion
-   - Part 3: `get_note_param_info()` — needed by `_PatternContext`
+   - Part 2: `_PATTERN_PARAM_SCHEMA` — `cycle`/`c`, `root`/`r` aliases
+   - Part 4: `get_note_param_info()` — needed by `_PatternContext`
+   - Part 5: Method params — `Single.trigger(length=)`
+   - Part 6: `Note` → `Single` — independent, clears naming confusion
 
 2. **Defer to Phase 1.3.3:**
-   - Part 2: `MIDI.note()` as canonical — will be implemented in `_PatternContext.note()`
+   - Part 3: `MIDI.note()` as canonical — will be implemented in `_PatternContext.note()`
    - `Comp` class — belongs in phase1.3.3
 
 ---
@@ -238,13 +323,15 @@ Phase 1.3.3 (_PatternContext)
 
 ### Alias Refactor (Do Now)
 1. **Part 1: Note Parameter Schema** — Foundation for aliasing
-2. **Part 4: Class Rename** — `Note` → `Single` (uses new param schema)
-3. **Part 3: Cross-Class Access** — `get_note_param_info()` helper
+2. **Part 2: Pattern Parameter Schema** — `cycle`/`c`, `root`/`r` aliases
+3. **Part 4: Cross-Class Access** — `get_note_param_info()` helper
+4. **Part 5: Method Parameter Aliases** — `Single.trigger(length=)`
+5. **Part 6: Class Rename** — `Note` → `Single` (uses new param schema)
 
 ### Defer to Phase 1.3.3 (_PatternContext)
-4. **Part 2: MIDI.note()** — Implemented in `_PatternContext.note()` base method
-5. **Comp class** — New class inheriting from `_PatternContext`
-6. **tc.note() deprecation** — Replaced by `ts.comp().n()`
+6. **Part 3: MIDI.note()** — Implemented in `_PatternContext.note()` base method
+7. **Comp class** — New class inheriting from `_PatternContext`
+8. **tc.note() deprecation** — Replaced by `ts.comp().n()`
 
 ### Documentation
 7. **Update README** — After alias refactor, before phase 1.3.3
@@ -265,17 +352,26 @@ Phase 1.3.3 (_PatternContext)
 
 These files/locations use short param names and will need updating:
 
-**trapscript.py:**
+**trapscript.py (Note params):**
 - `_fire_note()` (line ~915): `voice.note = src.m`
 - `PatternChain` (line ~1645-1650): `Note(m=int(midi_note), l=duration_beats, v=...)`
 - `_midi_n()` (line ~2685-2692): References to `self.note`
 - All `Note(m=..., v=..., l=...)` constructor calls
+
+**trapscript.py (Pattern params — Part 2):**
+- `MIDI.__init__()` (line ~248): `c=4` → `cycle=4`, `self._c` → `self._cycle`
+- `note()` (line ~2583): `c=4` → `cycle=4`, `bus_name` → `bus`
+- `n()` (line ~2646): `c=4` → `cycle=4`
+- `_midi_n()` (line ~2672): `c=None` → `cycle=None`
+- All internal `cycle_beats = c` assignments
+- Add kwarg alias resolution for `c` → `cycle`, `r` → `root`
 
 **README.md sections to update:**
 - Section 12: "Voice Triggering (Note API)" — lines 543-645
   - All `ts.Note(m=..., v=..., l=...)` examples
   - Parameter documentation table (lines 554-562)
   - Property access examples
+- Pattern function documentation: `c` parameter examples should show `cycle` as canonical
 
 ### Backwards Compatibility
 
@@ -293,6 +389,12 @@ After refactor, verify:
 - `note.midi = 72` and `note.m = 72` both work (setter)
 - Internal `_fire_note()` still works
 - Pattern triggering still works
+- `midi.n("0 1 2", cycle=8)` works (canonical)
+- `midi.n("0 1 2", c=8)` works (alias)
+- `ts.note("0 1 2", root=72)` works (canonical)
+- `ts.note("0 1 2", r=72)` works (alias)
+- `note.trigger(length=2)` works (canonical)
+- `note.trigger(l=2)` works (alias)
 
 ---
 
@@ -303,13 +405,18 @@ After refactor, verify:
 2. Add `_NOTE_ALIASES` auto-generated from schema
 3. Add `_NOTE_DEFAULTS` auto-generated from schema
 4. Update `_resolve_note_kwargs()` to use new schema
-5. Rename `class Note` → `class Single`
-6. Add `Note = Single` alias
-7. Add `s = Single` alias
-8. Update `Single.__init__` to use canonical names internally
-9. Flip property decorators (short → long becomes long ← short)
-10. Update all internal `Note(m=..., v=..., l=...)` calls
-11. Add `get_note_param_info()` helper function
+5. Add `_PATTERN_PARAM_SCHEMA` for `cycle`/`c`, `root`/`r`
+6. Add `_resolve_pattern_kwargs()` helper or inline alias resolution
+7. Update `MIDI.__init__()`: `c` → `cycle`, `self._c` → `self._cycle`
+8. Update `note()`, `n()`, `_midi_n()` signatures: `c` → `cycle`
+9. Update `Single.trigger()`: `l` → `length`, add `l` alias resolution
+10. Rename `class Note` → `class Single`
+11. Add `Note = Single` alias
+12. Add `s = Single` alias
+13. Update `Single.__init__` to use canonical names internally
+14. Flip property decorators (short → long becomes long ← short)
+15. Update all internal `Note(m=..., v=..., l=...)` calls
+16. Add `get_note_param_info()` helper function
 
 ### README.md
 1. Update Section 12 header: "Voice Triggering (Single API)" or keep "Note API" with explanation
@@ -322,5 +429,7 @@ After refactor, verify:
 ## Resolved Questions
 
 1. **Naming**: ✅ `ts.Single` confirmed
-2. **`color` / `c` collision**: ✅ Remove `c` alias for `color`
-3. **README update timing**: Update now with `ts.Single`, note that `ts.Note` still works for backwards compat
+2. **`color` / `c` collision**: ✅ Remove `c` alias for `color`. `c` reserved for `cycle` parameter.
+3. **`cycle` / `c` alias**: ✅ `cycle` is canonical, `c` is alias (consistent with Part 1 convention)
+4. **`root` / `r` alias**: ✅ `root` is canonical, `r` is alias
+5. **README update timing**: Update now with `ts.Single`, note that `ts.Note` still works for backwards compat
