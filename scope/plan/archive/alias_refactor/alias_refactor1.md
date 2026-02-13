@@ -1,4 +1,5 @@
 # Alias Refactoring Plan
+Status: Implemented
 
 Standardize parameter naming: full descriptive name is canonical, shorter forms are aliases.
 

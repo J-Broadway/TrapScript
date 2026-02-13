@@ -1,4 +1,5 @@
 # Alias Refactor 1.2 — Remaining Work
+Status: Implemented
 
 This document tracks what still needs to be done from the original alias refactor plan.
 

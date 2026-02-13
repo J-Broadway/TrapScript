@@ -1,8 +1,14 @@
-# TrapScript Phase 1.3 Scale Tests
+# TrapScript Alias Refactor Tests
+# Tests canonical and alias forms for all refactored parameters
 import flvfx as vfx
 import trapscript as ts
 
 ts.debug(True, level=1)
+
+# ============================================================
+# SELECT TEST TO RUN (set to number 1-15, or 0 for default)
+# ============================================================
+ACTIVE_TEST = 0
 
 def createDialog():
     ui = ts.UI()
@@ -10,59 +16,126 @@ def createDialog():
     return ui.form
 
 def onTriggerVoice(incomingVoice):
-    # === SLOWCAT REPLICATION BUG FIX TEST ===
-    # Test: <0!2 3 5 7> should play: 0, 0, 3, 5, 7 (5 cycles, then loop)
-    # Strudel reference: note("<0!2 3 5 7>").scale("c:major") → C3, C3, F3, A3, C4
-    midi = ts.MIDI(incomingVoice, scale="c5:major")
-    midi.n("<0!2 3 5 7>", c=2)  # Should play: C5, C5, F5, A5, C6 over 5 cycles
+    # --------------------------------------------------------
+    # ALIAS REFACTOR 1.2 TESTS
+    # Tests both canonical and alias parameter forms
+    # --------------------------------------------------------
     
-    # === SCALE SYSTEM TESTS ===
-    # Uncomment one test at a time
+    if ACTIVE_TEST == 0:
+        # === DEFAULT: Original slowcat test with canonical params ===
+        midi = ts.MIDI(incomingVoice, scale="c5:major")
+        midi.n("<0!2 3 5 7>", cycle=2)  # canonical: cycle=
     
-    # --- Test 1: Chromatic mode (no scale) - existing behavior ---
-    # Numbers are semitone offsets from incoming voice note
-    # midi = ts.MIDI(incomingVoice)
-    # midi.n("0 3 5 7", c=2)  # Minor triad arp from incoming note
+    # --------------------------------------------------------
+    # MIDI.__init__() - cycle parameter
+    # --------------------------------------------------------
     
-    # --- Test 2: Scale mode - major triad (degrees 0, 2, 4) ---
-    # Numbers are scale degree indices (0=root, 2=3rd, 4=5th)
-    # midi = ts.MIDI(incomingVoice, scale="c5:major")
-    # midi.n("0 2 4", c=2)  # C5, E5, G5 (C major triad)
+    elif ACTIVE_TEST == 1:
+        # Test: MIDI with canonical 'cycle' parameter
+        midi = ts.MIDI(incomingVoice, cycle=2, scale="c5:major")
+        midi.n("0 2 4")  # Should inherit cycle=2
     
-    # --- Test 3: Scale mode - minor 7th chord ---
-    # midi = ts.MIDI(incomingVoice, scale="a4:minor")
-    # midi.n("[0,2,4,6]", c=4)  # A4, C5, E5, G5 (Am7 chord)
+    elif ACTIVE_TEST == 2:
+        # Test: MIDI with alias 'c' parameter (backwards compat)
+        midi = ts.MIDI(incomingVoice, c=2, scale="c5:major")
+        midi.n("0 2 4")  # Should inherit cycle=2
     
-    # --- Test 4: Scale mode - pentatonic sequence ---
-    # midi = ts.MIDI(incomingVoice, scale="c4:pentatonic")
-    # midi.n("0 1 2 3 4 5 6", c=4)  # C D E G A C' D' (wraps octave)
+    # --------------------------------------------------------
+    # midi.n() - cycle parameter
+    # --------------------------------------------------------
     
-    # --- Test 5: Inheritance test - c from MIDI ---
-    # midi = ts.MIDI(incomingVoice, c=1, scale="c5:major")
-    # midi.n("0 2 4")  # Inherits c=1, plays C5 E5 G5 fast
+    elif ACTIVE_TEST == 3:
+        # Test: midi.n() with canonical 'cycle' parameter
+        midi = ts.MIDI(incomingVoice, scale="c5:major")
+        midi.n("0 2 4", cycle=2)  # canonical
     
-    # --- Test 6: Override at .n() level ---
-    # midi = ts.MIDI(incomingVoice, c=4, scale="c5:major")
-    # midi.n("0 2 4", scale="a4:minor")  # Overrides to A minor: A4 C5 E5
+    elif ACTIVE_TEST == 4:
+        # Test: midi.n() with alias 'c' parameter
+        midi = ts.MIDI(incomingVoice, scale="c5:major")
+        midi.n("0 2 4", c=2)  # alias
     
-    # --- Test 7: Negative degrees (below root) ---
-    # midi = ts.MIDI(incomingVoice, scale="c5:major")
-    # midi.n("-1 0 1 2", c=2)  # B4, C5, D5, E5
+    # --------------------------------------------------------
+    # ts.note() / ts.n() - cycle and root parameters
+    # --------------------------------------------------------
     
-    # --- Test 8: Note names with scale (quantization) ---
-    # midi = ts.MIDI(incomingVoice, scale="c5:minor")
-    # midi.n("c4 e4 g4", c=2)  # e4 quantizes to eb4 in C minor
+    elif ACTIVE_TEST == 5:
+        # Test: ts.note() with canonical parameters
+        ts.note("0 3 5 7", cycle=4, root=60, parent=incomingVoice)
     
-    # --- Test 9: Custom scale ---
-    # ts.scales.add('bebop', [0, 2, 4, 5, 7, 9, 10, 11])
-    # midi = ts.MIDI(incomingVoice, scale="c4:bebop")
-    # midi.n("0 1 2 3 4 5 6 7", c=4)  # C D E F G A Bb B
+    elif ACTIVE_TEST == 6:
+        # Test: ts.note() with alias parameters
+        ts.note("0 3 5 7", c=4, r=60, parent=incomingVoice)
     
-    # --- Test 10: Registry inspection ---
-    # print(ts.scales)        # <scales: major, minor, dorian, ...>
-    # print(ts.scales.list()) # ['major', 'minor', ...]
-    # print(ts.notes['c#'])   # 1
-    # print('dorian' in ts.scales)  # True
+    elif ACTIVE_TEST == 7:
+        # Test: ts.n() with canonical parameters
+        ts.n("0 3 5 7", cycle=4, root=72, parent=incomingVoice)
+    
+    elif ACTIVE_TEST == 8:
+        # Test: ts.n() with alias parameters
+        ts.n("0 3 5 7", c=4, r=72, parent=incomingVoice)
+    
+    elif ACTIVE_TEST == 9:
+        # Test: ts.n() with mixed canonical and alias
+        ts.n("0 3 5 7", cycle=4, r=60, parent=incomingVoice)
+    
+    # --------------------------------------------------------
+    # ts.note() / ts.n() - bus parameter
+    # --------------------------------------------------------
+    
+    elif ACTIVE_TEST == 10:
+        # Test: ts.note() with bus parameter (was bus_name)
+        ts.note("0 1 2 3", cycle=1, root=60, parent=incomingVoice, bus='test_bus')
+        # Verify bus registration (BusRegistry is a dict, use len() directly)
+        print(f"Bus 'test_bus' count: {len(ts.bus('test_bus'))}")
+    
+    elif ACTIVE_TEST == 11:
+        # Test: ts.n() with bus parameter
+        ts.n("0 1 2 3", cycle=1, root=60, parent=incomingVoice, bus='test_bus')
+        print(f"Bus 'test_bus' count: {len(ts.bus('test_bus'))}")
+    
+    elif ACTIVE_TEST == 12:
+        # Test: midi.n() with bus parameter
+        midi = ts.MIDI(incomingVoice, scale="c5:major")
+        midi.n("0 2 4", cycle=2, bus='midi_bus')
+        print(f"Bus 'midi_bus' count: {len(ts.bus('midi_bus'))}")
+    
+    # --------------------------------------------------------
+    # Single.trigger() - length parameter
+    # --------------------------------------------------------
+    
+    elif ACTIVE_TEST == 13:
+        # Test: Single.trigger() with canonical 'length' parameter
+        note = ts.Single(midi=60, velocity=100)
+        note.trigger(length=0.5)  # canonical
+    
+    elif ACTIVE_TEST == 14:
+        # Test: Single.trigger() with alias 'l' parameter
+        note = ts.Single(midi=60, velocity=100)
+        note.trigger(l=0.5)  # alias
+    
+    elif ACTIVE_TEST == 15:
+        # Test: Single with various alias params then trigger with length
+        note = ts.Single(m=72, v=80, l=2)  # aliases for midi, velocity, length
+        note.trigger(length=1)  # override length at trigger time
+    
+    # --------------------------------------------------------
+    # SCALE SYSTEM TESTS (unchanged, for regression)
+    # --------------------------------------------------------
+    
+    elif ACTIVE_TEST == 100:
+        # Chromatic mode (no scale)
+        midi = ts.MIDI(incomingVoice)
+        midi.n("0 3 5 7", cycle=2)
+    
+    elif ACTIVE_TEST == 101:
+        # Scale mode - major triad
+        midi = ts.MIDI(incomingVoice, scale="c5:major")
+        midi.n("0 2 4", cycle=2)
+    
+    elif ACTIVE_TEST == 102:
+        # Scale mode with inheritance
+        midi = ts.MIDI(incomingVoice, cycle=1, scale="c5:major")
+        midi.n("0 2 4")  # Inherits cycle=1
 
 def onReleaseVoice(incomingVoice):
     ts.stop_patterns_for_voice(incomingVoice)
