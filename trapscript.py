@@ -254,9 +254,10 @@ class MIDI(vfx.Voice):
         self._cycle = cycle              # Default cycle beats
         self._scale = None             # Scale intervals (e.g., [0,2,3,5,7,8,10])
         self._scale_root = None        # Scale root as MIDI note (e.g., 72 for C5)
+        self._scale_explicit = False   # Whether scale root has explicit octave
         
         if scale:
-            self._scale, self._scale_root = _parse_scale(scale)
+            self._scale, self._scale_root, self._scale_explicit = _parse_scale(scale)
 
 # -----------------------------
 # Public parameter namespace
@@ -1334,13 +1335,17 @@ def _is_note(value: str) -> bool:
 # -----------------------------
 def _parse_scale(scale_str):
     """
-    Parse scale string into (intervals, root_midi).
+    Parse scale string into (intervals, root_midi, is_explicit).
+    
+    When the root includes an octave number, the root is "explicit" --
+    degree 0 will always be that specific note. Without an octave number,
+    the root is "implicit" -- degree 0 follows the incoming voice.
     
     Examples:
-        "c:major"    -> ([0,2,4,5,7,9,11], 48)   # C3 default
-        "c5:major"   -> ([0,2,4,5,7,9,11], 72)   # C5
-        "a4:minor"   -> ([0,2,3,5,7,8,10], 69)   # A4
-        "f#5:blues"  -> ([0,3,5,6,7,10], 78)      # F#5
+        "c:major"    -> ([0,2,4,5,7,9,11], 60, False)   # C4 default, implicit
+        "c5:major"   -> ([0,2,4,5,7,9,11], 72, True)    # C5, explicit
+        "a4:minor"   -> ([0,2,3,5,7,8,10], 69, True)    # A4, explicit
+        "f#5:blues"  -> ([0,3,5,6,7,10], 78, True)      # F#5, explicit
     """
     parts = scale_str.lower().split(':')
     if len(parts) != 2:
@@ -1352,9 +1357,13 @@ def _parse_scale(scale_str):
     if intervals is None:
         raise ValueError(f"Unknown scale: {scale_name}. Available: {scales.list()}")
     
-    root_midi = _note_to_midi(root_str, default_octave=3)
+    # Detect explicit octave: any digit in root_str
+    has_explicit_octave = any(c.isdigit() for c in root_str)
     
-    return intervals, root_midi
+    # Default octave is 4 (middle C region)
+    root_midi = _note_to_midi(root_str, default_octave=4)
+    
+    return intervals, root_midi, has_explicit_octave
 
 
 def _scale_degree_to_midi(degree, scale_intervals, scale_root):
@@ -1510,6 +1519,7 @@ class PatternChain:
         self._cycle_beats = 4             # Cycle duration in beats
         self._scale = None                # Scale intervals (e.g., [0,2,3,5,7,8,10])
         self._scale_root = None           # Scale root as MIDI note
+        self._scale_explicit = False      # Whether scale root has explicit octave
         
         # Bus registration info
         self._bus_name = None
@@ -2750,10 +2760,11 @@ def _midi_n(self, pattern_str: str, cycle=None, scale=None, mute=False, bus=None
     
     # Parse scale if provided at .n() level, else inherit from MIDI
     if scale is not None:
-        active_scale, active_scale_root = _parse_scale(scale)
+        active_scale, active_scale_root, is_explicit = _parse_scale(scale)
     else:
         active_scale = self._scale
         active_scale_root = self._scale_root
+        is_explicit = self._scale_explicit
     
     # Create PatternChain with mute setting
     chain = PatternChain(midi_wrapper=self, mute=mute)
@@ -2767,13 +2778,19 @@ def _midi_n(self, pattern_str: str, cycle=None, scale=None, mute=False, bus=None
     # Store scale info on chain for note resolution
     chain._scale = active_scale
     chain._scale_root = active_scale_root
+    chain._scale_explicit = is_explicit
     
     # Determine pattern root
     if active_scale is not None:
-        # Snap incoming voice to nearest scale tone; degree 0 = snapped note
-        snapped_note = _quantize_to_scale(self.note, active_scale, active_scale_root)
-        chain._root = snapped_note
-        chain._base_degree = _midi_to_scale_degree(self.note, active_scale, active_scale_root)
+        if is_explicit:
+            # Explicit root: degree 0 = scale root, ignore incoming voice
+            chain._root = active_scale_root
+            chain._base_degree = 0
+        else:
+            # Implicit root: degree 0 = incoming voice's position (reactive)
+            snapped_note = _quantize_to_scale(self.note, active_scale, active_scale_root)
+            chain._root = snapped_note
+            chain._base_degree = _midi_to_scale_degree(self.note, active_scale, active_scale_root)
     else:
         chain._root = self.note  # Chromatic mode: root is incoming voice note
     
@@ -2857,6 +2874,7 @@ def _update_midi_patterns():
         # Get scale info from MIDI wrapper (if available)
         _mw_scale = getattr(midi_wrapper, '_scale', None)
         _mw_scale_root = getattr(midi_wrapper, '_scale_root', None)
+        _mw_scale_explicit = getattr(midi_wrapper, '_scale_explicit', False)
         
         for e in events:
             # Resolve note value: scale-aware resolution
@@ -2867,7 +2885,7 @@ def _update_midi_patterns():
                     note_val = e.value.midi  # Absolute MIDI from note name
             elif isinstance(e.value, (int, float)):
                 if _mw_scale is not None:
-                    _base_deg = getattr(midi_wrapper, '_base_degree', 0)
+                    _base_deg = 0 if _mw_scale_explicit else getattr(midi_wrapper, '_base_degree', 0)
                     absolute_degree = _base_deg + int(e.value)
                     note_val = _scale_degree_to_midi(absolute_degree, _mw_scale, _mw_scale_root)
                 else:

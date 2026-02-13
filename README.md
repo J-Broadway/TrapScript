@@ -72,20 +72,35 @@ def onTriggerVoice(incomingVoice):
 ### 1b. Scale System
 When a `scale` is set on `ts.MIDI`, pattern numbers become **scale degree indices** instead of semitone offsets.
 
-**Two Modes**:
+**Three Modes**:
 
 | Mode | Numbers Represent | Root Note |
 |------|------------------|-----------|
 | Chromatic (no scale) | Semitone offsets from incoming MIDI | Incoming voice note |
-| Scale mode | 0-indexed scale degree indices | Scale root |
+| Implicit root (`"c:major"`) | Scale degree indices relative to incoming voice | Incoming voice snapped to scale |
+| Explicit root (`"c5:major"`) | Scale degree indices from stated root | The explicit root note |
 
 **Scale String Format**: `"<root>[octave]:<scale_name>"`
 ```python
-"c:major"     # C3 major (default octave 3)
-"c5:major"    # C5 major
-"a4:minor"    # A4 natural minor
-"f#5:blues"   # F#5 blues scale
-"bb3:dorian"  # Bb3 dorian mode
+"c:major"     # C major, implicit root (default octave 4 for internal calc)
+"c5:major"    # C5 major, explicit root (degree 0 = C5)
+"a4:minor"    # A4 natural minor, explicit root (degree 0 = A4)
+"f#5:blues"   # F#5 blues scale, explicit root
+"bb3:dorian"  # Bb3 dorian mode, explicit root
+```
+
+**Implicit vs Explicit Root**:
+
+When the scale string includes an octave number (e.g., `"c5:major"`), the root is **explicit** -- degree 0 always plays that specific note regardless of the incoming voice. Without an octave (e.g., `"c:major"`), the root is **implicit** -- degree 0 follows the incoming voice's position in the scale.
+
+```python
+# Explicit root: degree 0 = C5, regardless of incoming voice
+midi = ts.MIDI(v, scale="c5:major")
+midi.n("0 2 4")  # Always plays C5, E5, G5
+
+# Implicit root: degree 0 = incoming voice's position in C major
+midi = ts.MIDI(v, scale="c:major")  # If incoming voice = E4...
+midi.n("0 2 4")  # Plays E4, G4, B4 (degrees relative to E4's position)
 ```
 
 **Scale Degree Examples** (C major = C D E F G A B):

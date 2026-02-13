@@ -1,12 +1,25 @@
 # Phase 1.3.3: ts.comp() — Standalone Pattern Context
 
+## Role of this phase
+
+This document is the **architecture blueprint** for `Comp` context class.
+
+Implementation-level lifecycle/registration constraints are defined in:
+
+- `phase1.3.2.2_unify_chain_construction.md`
+- `phase1.3.2.3_PatternChain_lifecycle.md`
+
+`1.3.3` should be implemented by applying those constraints through the mixin-based design in this file.
+
+**Prerequisite:** `_CompContextMixin` is introduced and `MIDI` is refactored to use it in phase 1.3.2.3.
+
 ## Problem
 
-`ts.MIDI` provides OOP defaults (scale, c) that `.n()` inherits. `ts.n()` has no equivalent — it's stateless and doesn't support scales. This creates an architectural gap.
+`ts.MIDI` provides OOP defaults (scale, cycle) that `.n()` inherits. We are removing global standalone pattern APIs (`ts.n()` and global `ts.note()`) and need a standalone replacement with equivalent OOP defaults and scale behavior. This creates an architectural gap.
 
 ## Solution
 
-Introduce `ts.comp()` — a standalone pattern context with the same OOP structure as `ts.MIDI`, minus voice binding.
+Introduce `ts.comp()` — a standalone pattern context with the same OOP structure as `ts.MIDI`, minus required voice binding.
 
 ## Scale Root Resolution (see Phase 1.3.2.1)
 
@@ -22,40 +35,68 @@ Introduce `ts.comp()` — a standalone pattern context with the same OOP structu
 
 ```python
 # Explicit scale — root= ignored, degree 0 = A4
-ts.comp(scale="a4:minor").n("0")  # Plays A4
+ts.comp(scale="a4:minor").note("0")  # Plays A4
 
 # Implicit scale — defaults to scale root (A4)
-ts.comp(scale="a:minor").n("0")  # Plays A4
+ts.comp(scale="a:minor").note("0")  # Plays A4
 
 # Implicit scale with root override — degree 0 = C4's position
-ts.comp(scale="a:minor", root="c4").n("0")  # Plays C4 (snapped, it's in scale)
+ts.comp(scale="a:minor", root="c4").note("0")  # Plays C4 (snapped, it's in scale)
 ```
 
-## Design: Abstract Base Class + Template Method
+## Design: Mixin Pattern
+
+Since `MIDI` must inherit from `vfx.Voice` (external FL Studio class with incompatible `__init__` signature), we use a **mixin pattern** rather than abstract base class inheritance.
+
+`_CompContextMixin` is introduced in phase 1.3.2.3 and verified with `MIDI` before this phase begins.
 
 ```python
-class _CompContext:
-    """Base: shared defaults, scale handling, pattern creation."""
+class _CompContextMixin:
+    """
+    Mixin providing shared pattern creation and scale handling.
     
-    def __init__(self, c=4, scale=None, root=None, v=1.0, pan=0.0, parent=None):
-        # Store defaults, parse scale (returns is_explicit flag)
+    No __init__ — shared config goes through _configure_context().
+    Designed to work with multiple inheritance (MIDI inherits from vfx.Voice).
+    """
     
-    def note(self, pattern_str, c=None, scale=None, ...) -> PatternChain:
-        """Canonical method for pattern creation."""
-        chain._root = self._resolve_root(scale_root, is_explicit)  # Template method
-        self._on_pattern_created(chain)  # Template method
+    def _configure_context(self, cycle=4, scale=None, octave=4, velocity=1.0, pan=0.0):
+        """Initialize shared context state. Called from subclass __init__."""
+        self._cycle = cycle
+        self._octave = octave
+        self._default_velocity = velocity
+        self._default_pan = pan
+        self._scale = None
+        self._scale_root = None
+        self._scale_explicit = False
+        if scale:
+            self._scale, self._scale_root, self._scale_explicit = _parse_scale(scale)
     
-    n = note  # Alias (per alias_refactor.md)
+    def note(self, pattern_str, cycle=None, scale=None, mute=False, bus=None, **kwargs):
+        """Canonical pattern creation — delegates to shared builder."""
+        # Build chain through unified constructor (from 1.3.2.2)
+        chain = _build_pattern_chain(...)
+        chain._root = self._resolve_root(...)  # Template method
+        self._on_pattern_created(chain)        # Template method
+        return chain
+    
+    n = note  # Alias
     
     def _resolve_root(self, scale_root, is_explicit):
+        """Template method: override in subclasses."""
         raise NotImplementedError
     
     def _on_pattern_created(self, chain):
-        pass  # Override for lifecycle behavior
+        """Template method: override for lifecycle policy."""
+        pass
 
 
-class MIDI(vfx.Voice, _CompContext):
+class MIDI(vfx.Voice, _CompContextMixin):
     """Voice-bound context. Auto-triggers, auto-releases."""
+    
+    def __init__(self, incomingVoice, cycle=4, scale=None, **kwargs):
+        super().__init__(incomingVoice)  # vfx.Voice init
+        self._configure_context(cycle=cycle, scale=scale)  # Mixin init
+        self.parentVoice = incomingVoice
     
     def _resolve_root(self, scale_root, is_explicit):
         if is_explicit:
@@ -68,14 +109,19 @@ class MIDI(vfx.Voice, _CompContext):
             return snapped, base_deg
     
     def _on_pattern_created(self, chain):
-        # Auto-start, register for voice lifecycle
+        chain.trigger()  # Auto lifecycle policy
 
 
-class Comp(_CompContext):
+class Comp(_CompContextMixin):
     """Standalone context. Manual trigger/release."""
     
-    def __init__(self, c=4, scale=None, root=None, v=1.0, pan=0.0, parent=None):
-        # root is optional (defaults to scale root if not provided)
+    def __init__(self, octave=4, scale=None, root=None, velocity=1.0, pan=0.0, parent=None):
+        self._configure_context(
+            cycle=4, scale=scale, octave=octave,
+            velocity=velocity, pan=pan
+        )
+        self._root_param = root  # Optional root override
+        self._parent = parent   # Optional voice binding
     
     def _resolve_root(self, scale_root, is_explicit):
         if is_explicit:
@@ -91,7 +137,91 @@ class Comp(_CompContext):
             return scale_root, 0
     
     def _on_pattern_created(self, chain):
-        pass  # No auto-start; user calls .trigger()
+        # Manual lifecycle policy; user calls .trigger(...)
+        # But still register parent binding if provided
+        if self._parent:
+            chain._parent_voice = self._parent
+        pass
+```
+
+## parent= Binding Semantics
+
+When `parent=v` is provided to `ts.comp()`:
+
+- The chain is registered into `_voice_chain_map` for automatic cleanup
+- `stop_patterns_for_voice(v)` will clean up the chain when the parent voice releases
+- This creates a **mixed-policy chain**: manual start via `.trigger()`, automatic cleanup via voice release
+
+This is the intentional design: `parent=` provides lifecycle binding without forcing auto-start.
+
+```python
+def onTriggerVoice(v):
+    # Manual trigger, but auto-cleanup when v releases
+    pat = ts.comp(scale="c5:major", parent=v)
+    pat.note("0 2 4").trigger()
+```
+
+## Chain Count Guard (Memory Leak Protection)
+
+`ts.comp()` is designed to be called from `onTick()`. A naive user could create unbounded chains:
+
+```python
+# BAD: Creates new chain every tick — memory leak!
+def onTick():
+    ts.comp(scale="c:minor").n("0 1 2").trigger()
+    ts.update()
+```
+
+### Two-stage guard on unbound Comp chains
+
+Implement a guard that tracks active chains without `parent=` binding:
+
+```python
+_UNBOUND_CHAIN_WARN_THRESHOLD = 32
+_UNBOUND_CHAIN_ERROR_THRESHOLD = 128
+
+def _check_unbound_chain_count():
+    """Check for potential memory leak from unbound Comp chains."""
+    unbound_count = sum(
+        1 for chain_id, (chain, _, _, parent_id) in _chain_registry.items()
+        if parent_id is None
+    )
+    
+    if unbound_count >= _UNBOUND_CHAIN_ERROR_THRESHOLD:
+        raise RuntimeError(
+            f"[TrapScript] {unbound_count} unbound pattern chains detected. "
+            f"This indicates a memory leak — patterns created in onTick() without "
+            f"parent= binding or .stop() cleanup. Use global variables with "
+            f"'if None' guards, or provide parent= for automatic cleanup."
+        )
+    elif unbound_count >= _UNBOUND_CHAIN_WARN_THRESHOLD:
+        print(
+            f"[TrapScript] Warning: {unbound_count} unbound pattern chains. "
+            f"Consider using parent= binding or manual .stop() cleanup."
+        )
+```
+
+Call `_check_unbound_chain_count()` in `PatternChain.trigger()` when the chain has no parent binding.
+
+### Idiomatic usage patterns (document prominently)
+
+```python
+# GOOD: Create once, guard with global
+_melody = None
+def onTick():
+    global _melody
+    if _melody is None:
+        _melody = ts.comp(scale="c:minor").n("0 1 2").trigger()
+    ts.update()
+
+# GOOD: Use parent= for automatic cleanup
+def onTriggerVoice(v):
+    ts.comp(scale="c:minor", parent=v).n("0 1 2").trigger()
+
+# GOOD: Manual cleanup
+_pattern = ts.comp(scale="c:minor").n("0 1 2").trigger()
+# ... later ...
+_pattern.stop()
 ```
 
 ## API Comparison
@@ -99,9 +229,10 @@ class Comp(_CompContext):
 | Aspect | `ts.MIDI(v)` | `ts.comp()` |
 |--------|-------------|-------------|
 | Root source | `v.note` (or scale root if explicit) | Scale root (or `root=` if implicit) |
-| Lifecycle | Auto (bound to `v`) | Manual (`.trigger()` / `.release()`) |
+| Lifecycle | Auto (bound to `v`) | Manual (`.trigger()` / `.stop()`) |
 | Context | `onTriggerVoice` | `onTick` / anywhere |
 | Parent binding | Required (`v`) | Optional (`parent=`) |
+| Cleanup | Automatic via `stop_patterns_for_voice` | Manual, or automatic if `parent=` provided |
 
 ## Usage
 
@@ -119,24 +250,64 @@ def onTriggerVoice(v):
 # Compositional (explicit scale)
 def onTick():
     pat = ts.comp(scale="a4:minor")
-    pat.n("0 2 4").trigger()  # Plays A4, C5, E5
+    pat.note("0 2 4").trigger()  # Plays A4, C5, E5
 
 # Compositional (implicit scale, defaults to scale root)
 def onTick():
     pat = ts.comp(scale="a:minor")
-    pat.n("0 2 4").trigger()  # Plays A4, C5, E5 (same result)
+    pat.note("0 2 4").trigger()  # Plays A4, C5, E5 (same result)
 
 # Compositional (implicit scale with root override)
 def onTick():
     pat = ts.comp(scale="a:minor", root="c4")
-    pat.n("0 2 4").trigger()  # degree 0 = C4's position in A minor
+    pat.note("0 2 4").trigger()  # degree 0 = C4's position in A minor
 
-# Compositional with optional voice binding
+# Compositional with voice binding (manual trigger, auto cleanup)
 def onTriggerVoice(v):
     pat = ts.comp(scale="c5:major", parent=v)
-    pat.n("0 2 4").trigger()  # Manual trigger, auto-release with v
+    pat.note("0 2 4").trigger()  # Manual trigger, cleanup when parent releases
 ```
 
-## Deprecation
+## API Direction
 
-`ts.n()` is deprecated in favor of `ts.comp().n()`.
+Global `ts.n()` and global `ts.note()` are removed in this phase progression. Standalone composition should use `ts.comp()`.
+
+```python
+def onTick():
+    comp = ts.comp(scale="c:minor")
+    comp.n("0 1 2").trigger()
+```
+
+### Migration
+
+```python
+# Old
+ts.n("0 1 2", cycle=4, root=60)
+ts.note("0 1 2", cycle=4, root=60)
+
+# New
+ts.comp(root=60).n("0 1 2", cycle=4).trigger()
+```
+
+## Sequencing
+
+Recommended order:
+
+1. `1.3.2.2` unify construction + remove legacy pattern systems
+2. `1.3.2.3` explicit lifecycle ownership + introduce `_CompContextMixin` + refactor `MIDI`
+3. `1.3.3` `Comp` class implementation (this blueprint)
+4. `1.3.4` lifecycle additions (`pause/play/restart`, advanced trigger modes)
+
+`1.3.4` should be implemented **after** `1.3.3`, not bundled into `1.3.3`.
+
+## Verification checklist
+
+- [ ] `Comp` class exists and uses `_CompContextMixin`
+- [ ] `ts.comp(scale="c:minor").n("0 1 2").trigger()` creates and plays pattern
+- [ ] `ts.comp()` without `.trigger()` does NOT play (manual lifecycle)
+- [ ] `ts.comp(parent=v)` registers chain for automatic cleanup via `stop_patterns_for_voice`
+- [ ] Chain count guard warns at 32 unbound chains
+- [ ] Chain count guard errors at 128 unbound chains
+- [ ] `_resolve_root` behaves correctly for explicit vs implicit scales
+- [ ] `_resolve_root` respects `root=` parameter for implicit scales
+- [ ] `MIDI` still works correctly (regression test from 1.3.2.3)
